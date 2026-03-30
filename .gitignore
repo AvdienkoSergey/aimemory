@@ -1,0 +1,29 @@
+# Dune build artifacts
+_build/
+*.install
+
+# Opam
+_opam/
+*.opam.locked
+
+# Merlin
+.merlin
+
+# Editor
+*~
+\#*\#
+.\#*
+*.swp
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test databases
+*.db
+test_*.db
+
+# AI assistent
+.claude

@@ -1,0 +1,4 @@
+(library
+ (name storage)
+ (wrapped false)
+ (libraries domain sqlite3))

@@ -1,0 +1,4 @@
+(executable
+ (public_name aimemory)
+ (name main)
+ (libraries domain storage engine api))
