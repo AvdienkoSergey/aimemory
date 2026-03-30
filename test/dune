@@ -1,3 +1,11 @@
 (tests
  (names test_domain test_storage test_engine test_api)
  (libraries ounit2 domain storage engine api yojson))
+
+(test
+ (name test_log)
+ (libraries ounit2 support str logs))
+
+(test
+ (name test_prop)
+ (libraries ounit2 qcheck-core qcheck-ounit domain storage))
