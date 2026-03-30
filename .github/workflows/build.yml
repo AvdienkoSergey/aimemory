@@ -58,8 +58,8 @@ jobs:
           path: _build/default/bin/main.exe
           if-no-files-found: ignore
 
-  build-macos-x86:
-    runs-on: macos-13
+  build-windows:
+    runs-on: windows-latest
 
     steps:
       - name: Checkout
@@ -79,6 +79,6 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: aimemory-macos-x86_64
+          name: aimemory-windows-x86_64
           path: _build/default/bin/main.exe
           if-no-files-found: ignore

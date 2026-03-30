@@ -10,8 +10,8 @@ license: "MIT"
 homepage: "https://github.com/AvdienkoSergey/aimemory"
 bug-reports: "https://github.com/AvdienkoSergey/aimemory/issues"
 depends: [
+  "dune" {>= "3.20"}
   "ocaml" {>= "5.1"}
-  "dune" {>= "3.20" & >= "3.20"}
   "sqlite3"
   "yojson"
   "sexplib0"

@@ -24,7 +24,6 @@
  (description "SQLite-based context memory system for AI agents with entity storage, references and queries")
  (depends
   (ocaml (>= 5.1))
-  (dune (>= 3.20))
   sqlite3
   yojson
   sexplib0
