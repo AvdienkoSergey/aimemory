@@ -1,4 +1,4 @@
 (library
  (name storage)
  (wrapped false)
- (libraries domain sqlite3))
+ (libraries support domain sqlite3 yojson))

@@ -1,6 +1,6 @@
 (* repo.ml — SQLite implementation of the Repo interface *)
 
-type t = { db : Sqlite3.db }
+type t = { db : Sqlite3.db; path : string [@warning "-69"] }
 
 type error =
   | Db_error of string
@@ -36,206 +36,51 @@ let exec_sql db sql =
            (Printf.sprintf "%s: %s" (Sqlite3.Rc.to_string rc)
               (Sqlite3.errmsg db)))
 
-(** Encode Entity.data as a simple JSON string (manual — no dep on yojson) *)
-let rec encode_value = function
-  | Entity.String s ->
-      let escaped = String.concat "\\\"" (String.split_on_char '"' s) in
-      "\"" ^ escaped ^ "\""
-  | Entity.Int i -> string_of_int i
-  | Entity.Float f -> string_of_float f
-  | Entity.Bool b -> if b then "true" else "false"
-  | Entity.Null -> "null"
-  | Entity.List vs -> "[" ^ String.concat "," (List.map encode_value vs) ^ "]"
+(** Collect rows from statement using a row parser. Functional style. *)
+let collect_rows stmt parse_row =
+  let rec loop acc =
+    match Sqlite3.step stmt with
+    | Sqlite3.Rc.ROW ->
+        let acc' = match parse_row stmt with
+          | Some v -> v :: acc
+          | None -> acc
+        in
+        loop acc'
+    | _ -> List.rev acc
+  in
+  loop []
 
+(** Entity.value ↔ Yojson.Safe.t conversion *)
+let rec value_to_json : Entity.value -> Yojson.Safe.t = function
+  | Entity.String s -> `String s
+  | Entity.Int i    -> `Int i
+  | Entity.Float f  -> `Float f
+  | Entity.Bool b   -> `Bool b
+  | Entity.Null     -> `Null
+  | Entity.List vs  -> `List (List.map value_to_json vs)
+
+let rec json_to_value : Yojson.Safe.t -> Entity.value = function
+  | `String s -> Entity.String s
+  | `Int i    -> Entity.Int i
+  | `Float f  -> Entity.Float f
+  | `Bool b   -> Entity.Bool b
+  | `Null     -> Entity.Null
+  | `List vs  -> Entity.List (List.map json_to_value vs)
+  | `Assoc _ as obj -> Entity.String (Yojson.Safe.to_string obj)
+  | other     -> Entity.String (Yojson.Safe.to_string other)
+
+(** Encode Entity.data => JSON string (for DB storage) *)
 let encode_data (d : Entity.data) : string =
-  let pairs = List.map (fun (k, v) -> "\"" ^ k ^ "\":" ^ encode_value v) d in
-  "{" ^ String.concat "," pairs ^ "}"
+  `Assoc (List.map (fun (k, v) -> (k, value_to_json v)) d)
+  |> Yojson.Safe.to_string
 
-(** Minimal JSON string/number/bool/null parser for Entity.data. Handles the
-    subset we produce in [encode_data]. *)
+(** Decode JSON string => Entity.data (from DB storage) *)
 let decode_data (s : string) : Entity.data =
-  (* Minimal parser — sufficient for our own output *)
-  let len = String.length s in
-  let pos = ref 0 in
-  let peek () = if !pos < len then Some s.[!pos] else None in
-  let advance () = incr pos in
-  let rec skip_ws () =
-    match peek () with
-    | Some (' ' | '\t' | '\n' | '\r') ->
-        advance ();
-        skip_ws ()
-    | _ -> ()
-  in
-  let expect c =
-    skip_ws ();
-    match peek () with
-    | Some ch when ch = c -> advance ()
-    | Some ch ->
-        failwith (Printf.sprintf "expected '%c' got '%c' at %d" c ch !pos)
-    | None -> failwith (Printf.sprintf "expected '%c' got EOF" c)
-  in
-  let rec parse_value () : Entity.value =
-    skip_ws ();
-    match peek () with
-    | Some '"' -> Entity.String (parse_string ())
-    | Some '{' ->
-        (* nested object — store as string for now *)
-        let start = !pos in
-        ignore (parse_object_raw ());
-        Entity.String (String.sub s start (!pos - start))
-    | Some '[' -> Entity.List (parse_array ())
-    | Some 't' ->
-        (* true *)
-        pos := !pos + 4;
-        Entity.Bool true
-    | Some 'f' ->
-        (* false *)
-        pos := !pos + 5;
-        Entity.Bool false
-    | Some 'n' ->
-        (* null *)
-        pos := !pos + 4;
-        Entity.Null
-    | Some c when c = '-' || (c >= '0' && c <= '9') -> parse_number ()
-    | Some c -> failwith (Printf.sprintf "unexpected char '%c' at %d" c !pos)
-    | None -> failwith "unexpected EOF"
-  and parse_string () : string =
-    expect '"';
-    let buf = Buffer.create 32 in
-    let rec loop () =
-      match peek () with
-      | Some '\\' -> (
-          advance ();
-          match peek () with
-          | Some '"' ->
-              Buffer.add_char buf '"';
-              advance ();
-              loop ()
-          | Some '\\' ->
-              Buffer.add_char buf '\\';
-              advance ();
-              loop ()
-          | Some 'n' ->
-              Buffer.add_char buf '\n';
-              advance ();
-              loop ()
-          | Some c ->
-              Buffer.add_char buf '\\';
-              Buffer.add_char buf c;
-              advance ();
-              loop ()
-          | None -> ())
-      | Some '"' -> advance ()
-      | Some c ->
-          Buffer.add_char buf c;
-          advance ();
-          loop ()
-      | None -> ()
-    in
-    loop ();
-    Buffer.contents buf
-  and parse_number () : Entity.value =
-    let start = !pos in
-    let is_float = ref false in
-    let rec loop () =
-      match peek () with
-      | Some c when (c >= '0' && c <= '9') || c = '-' ->
-          advance ();
-          loop ()
-      | Some '.' | Some 'e' | Some 'E' ->
-          is_float := true;
-          advance ();
-          loop ()
-      | _ -> ()
-    in
-    loop ();
-    let raw = String.sub s start (!pos - start) in
-    if !is_float then Entity.Float (float_of_string raw)
-    else Entity.Int (int_of_string raw)
-  and parse_array () : Entity.value list =
-    expect '[';
-    skip_ws ();
-    match peek () with
-    | Some ']' ->
-        advance ();
-        []
-    | _ ->
-        let items = ref [] in
-        items := parse_value () :: !items;
-        let rec loop () =
-          skip_ws ();
-          match peek () with
-          | Some ',' ->
-              advance ();
-              items := parse_value () :: !items;
-              loop ()
-          | Some ']' -> advance ()
-          | _ -> ()
-        in
-        loop ();
-        List.rev !items
-  and parse_object_raw () : unit =
-    expect '{';
-    let depth = ref 1 in
-    while !depth > 0 do
-      match peek () with
-      | Some '{' ->
-          incr depth;
-          advance ()
-      | Some '}' ->
-          decr depth;
-          advance ()
-      | Some '"' ->
-          advance ();
-          let rec skip_str () =
-            match peek () with
-            | Some '\\' ->
-                advance ();
-                advance ();
-                skip_str ()
-            | Some '"' -> advance ()
-            | Some _ ->
-                advance ();
-                skip_str ()
-            | None -> ()
-          in
-          skip_str ()
-      | Some _ -> advance ()
-      | None -> depth := 0
-    done
-  in
-  let parse_object () : Entity.data =
-    expect '{';
-    skip_ws ();
-    match peek () with
-    | Some '}' ->
-        advance ();
-        []
-    | _ ->
-        let pairs = ref [] in
-        let parse_pair () =
-          skip_ws ();
-          let k = parse_string () in
-          skip_ws ();
-          expect ':';
-          let v = parse_value () in
-          pairs := (k, v) :: !pairs
-        in
-        parse_pair ();
-        let rec loop () =
-          skip_ws ();
-          match peek () with
-          | Some ',' ->
-              advance ();
-              parse_pair ();
-              loop ()
-          | Some '}' -> advance ()
-          | _ -> ()
-        in
-        loop ();
-        List.rev !pairs
-  in
-  try parse_object () with _ -> []
+  try
+    match Yojson.Safe.from_string s with
+    | `Assoc pairs -> List.map (fun (k, v) -> (k, json_to_value v)) pairs
+    | _ -> []
+  with _ -> []
 
 (* ---------- lifecycle ---------- *)
 
@@ -251,16 +96,22 @@ let run_migrations db =
   match errs with [] -> Ok () | e :: _ -> Error (Migration_error e)
 
 let open_db path =
+  Log.debug (fun m -> m "opening database: %s" path);
   try
     let db = Sqlite3.db_open path in
     ignore (Sqlite3.exec db "PRAGMA journal_mode=WAL;");
     ignore (Sqlite3.exec db "PRAGMA foreign_keys=ON;");
     match run_migrations db with
-    | Ok () -> Ok { db }
+    | Ok () ->
+        Log.info (fun m -> m "database opened: %s" path);
+        Ok { db; path }
     | Error e ->
+        Log.err (fun m -> m "migration failed: %s" (pp_error e));
         ignore (Sqlite3.db_close db);
         Error e
-  with exn -> Error (Db_error (Printexc.to_string exn))
+  with exn ->
+    Log.err (fun m -> m "failed to open database: %s" (Printexc.to_string exn));
+    Error (Db_error (Printexc.to_string exn))
 
 let close t = ignore (Sqlite3.db_close t.db)
 
@@ -297,6 +148,7 @@ let with_tx t f =
 (* ---------- entity CRUD ---------- *)
 
 let upsert t (raw : Entity.raw) =
+  Log.debug (fun m -> m "upsert %s" (Lid.to_string raw.lid));
   let lid_s = Lid.to_string raw.lid in
   let kind_s = Lid.prefix_of_kind (Lid.kind raw.lid) in
   let path_s = Lid.path raw.lid in
@@ -391,47 +243,38 @@ let find_by_id t id =
   ignore (Sqlite3.finalize stmt);
   result
 
-let query_entities t ?kind ?pattern () =
-  let base = "SELECT id, lid, data, created, updated FROM entities WHERE 1=1" in
-  let clauses = ref [] in
-  let binds = ref [] in
-  let bind_idx = ref 1 in
-  (match kind with
-  | Some k ->
-      let idx = !bind_idx in
-      clauses := Printf.sprintf " AND kind = ?%d" idx :: !clauses;
-      binds :=
-        (fun stmt ->
-          ignore
-            (Sqlite3.bind stmt idx (Sqlite3.Data.TEXT (Lid.prefix_of_kind k))))
-        :: !binds;
-      incr bind_idx
-  | None -> ());
-  (match pattern with
-  | Some p ->
-      let idx = !bind_idx in
-      clauses := Printf.sprintf " AND path LIKE ?%d" idx :: !clauses;
-      binds :=
-        (fun stmt -> ignore (Sqlite3.bind stmt idx (Sqlite3.Data.TEXT p)))
-        :: !binds;
-      incr bind_idx
-  | None -> ());
-  let sql = base ^ String.concat "" (List.rev !clauses) ^ " ORDER BY lid" in
-  let stmt = Sqlite3.prepare t.db sql in
-  List.iter (fun f -> f stmt) (List.rev !binds);
-  let results = ref [] in
-  let rec loop () =
-    match Sqlite3.step stmt with
-    | Sqlite3.Rc.ROW ->
-        (match row_to_stored stmt with
-        | Some e -> results := e :: !results
-        | None -> ());
-        loop ()
-    | _ -> ()
+let query_entities t ?kind ?pattern ?limit ?offset () =
+  let filters = List.filter_map Fun.id [
+    Option.map (fun k -> (" AND kind = ?", Sqlite3.Data.TEXT (Lid.prefix_of_kind k))) kind;
+    Option.map (fun p -> (" AND path LIKE ?", Sqlite3.Data.TEXT p)) pattern;
+  ] in
+  let where_clause = String.concat "" (List.map fst filters) in
+  let bind_filters stmt start_idx =
+    List.iteri (fun i (_, v) -> ignore (Sqlite3.bind stmt (start_idx + i) v)) filters
   in
-  loop ();
+  (* Count total *)
+  let count_sql = "SELECT COUNT(*) FROM entities WHERE 1=1" ^ where_clause in
+  let count_stmt = Sqlite3.prepare t.db count_sql in
+  bind_filters count_stmt 1;
+  let total = match Sqlite3.step count_stmt with
+    | Sqlite3.Rc.ROW -> Sqlite3.Data.to_int_exn (Sqlite3.column count_stmt 0)
+    | _ -> 0
+  in
+  ignore (Sqlite3.finalize count_stmt);
+  (* Fetch page *)
+  let base = "SELECT id, lid, data, created, updated FROM entities WHERE 1=1" in
+  let pagination = match limit with
+    | Some l ->
+      let o = Option.value offset ~default:0 in
+      Printf.sprintf " LIMIT %d OFFSET %d" l o
+    | None -> ""
+  in
+  let sql = base ^ where_clause ^ " ORDER BY lid" ^ pagination in
+  let stmt = Sqlite3.prepare t.db sql in
+  bind_filters stmt 1;
+  let results = collect_rows stmt row_to_stored in
   ignore (Sqlite3.finalize stmt);
-  Ok (List.rev !results)
+  Ok (results, total)
 
 let delete t lid =
   let lid_s = Lid.to_string lid in
@@ -477,8 +320,28 @@ let insert_refs t refs =
       in
       loop refs)
 
+(** Parse resolved ref row: source_lid, target_lid, rel_type, source_id, target_id *)
+let row_to_resolved stmt =
+  let src_s = Sqlite3.Data.to_string_exn (Sqlite3.column stmt 0) in
+  let tgt_s = Sqlite3.Data.to_string_exn (Sqlite3.column stmt 1) in
+  let rel_s = Sqlite3.Data.to_string_exn (Sqlite3.column stmt 2) in
+  let src_id = Sqlite3.Data.to_int_exn (Sqlite3.column stmt 3) in
+  let tgt_id = Sqlite3.Data.to_int_exn (Sqlite3.column stmt 4) in
+  match Lid.of_string src_s, Lid.of_string tgt_s, Ref.rel_of_string rel_s with
+  | Ok source, Ok target, Some rel ->
+      Some Ref.{ source; target; rel; source_id = src_id; target_id = tgt_id }
+  | _ -> None
+
+(** Parse pending ref row: source_lid, target_lid, rel_type *)
+let row_to_pending stmt =
+  let src_s = Sqlite3.Data.to_string_exn (Sqlite3.column stmt 0) in
+  let tgt_s = Sqlite3.Data.to_string_exn (Sqlite3.column stmt 1) in
+  let rel_s = Sqlite3.Data.to_string_exn (Sqlite3.column stmt 2) in
+  match Lid.of_string src_s, Lid.of_string tgt_s, Ref.rel_of_string rel_s with
+  | Ok source, Ok target, Some rel -> Some Ref.{ source; target; rel }
+  | _ -> None
+
 let resolve_all t =
-  (* Mark as resolved where both source and target entities exist *)
   let update_sql =
     "UPDATE refs SET resolved = 1 WHERE resolved = 0 AND source_lid IN (SELECT \
      lid FROM entities) AND target_lid IN (SELECT lid FROM entities)"
@@ -486,167 +349,73 @@ let resolve_all t =
   match exec_sql t.db update_sql with
   | Error e -> Error e
   | Ok () ->
-      (* Fetch newly resolved *)
       let resolved_sql =
         "SELECT r.source_lid, r.target_lid, r.rel_type, es.id, et.id FROM refs \
          r JOIN entities es ON es.lid = r.source_lid JOIN entities et ON \
          et.lid = r.target_lid WHERE r.resolved = 1"
       in
       let stmt_r = Sqlite3.prepare t.db resolved_sql in
-      let resolved = ref [] in
-      let rec loop () =
-        match Sqlite3.step stmt_r with
-        | Sqlite3.Rc.ROW ->
-            let src_lid_s =
-              Sqlite3.Data.to_string_exn (Sqlite3.column stmt_r 0)
-            in
-            let tgt_lid_s =
-              Sqlite3.Data.to_string_exn (Sqlite3.column stmt_r 1)
-            in
-            let rel_s = Sqlite3.Data.to_string_exn (Sqlite3.column stmt_r 2) in
-            let src_id = Sqlite3.Data.to_int_exn (Sqlite3.column stmt_r 3) in
-            let tgt_id = Sqlite3.Data.to_int_exn (Sqlite3.column stmt_r 4) in
-            (match
-               ( Lid.of_string src_lid_s,
-                 Lid.of_string tgt_lid_s,
-                 Ref.rel_of_string rel_s )
-             with
-            | Ok source, Ok target, Some rel ->
-                resolved :=
-                  Ref.
-                    {
-                      source;
-                      target;
-                      rel;
-                      source_id = src_id;
-                      target_id = tgt_id;
-                    }
-                  :: !resolved
-            | _ -> ());
-            loop ()
-        | _ -> ()
-      in
-      loop ();
+      let resolved = collect_rows stmt_r row_to_resolved in
       ignore (Sqlite3.finalize stmt_r);
-      (* Fetch still pending *)
       let pending_sql =
         "SELECT source_lid, target_lid, rel_type FROM refs WHERE resolved = 0"
       in
       let stmt_p = Sqlite3.prepare t.db pending_sql in
-      let pending = ref [] in
-      let rec loop2 () =
-        match Sqlite3.step stmt_p with
-        | Sqlite3.Rc.ROW ->
-            let src_s = Sqlite3.Data.to_string_exn (Sqlite3.column stmt_p 0) in
-            let tgt_s = Sqlite3.Data.to_string_exn (Sqlite3.column stmt_p 1) in
-            let rel_s = Sqlite3.Data.to_string_exn (Sqlite3.column stmt_p 2) in
-            (match
-               ( Lid.of_string src_s,
-                 Lid.of_string tgt_s,
-                 Ref.rel_of_string rel_s )
-             with
-            | Ok source, Ok target, Some rel ->
-                pending := Ref.{ source; target; rel } :: !pending
-            | _ -> ());
-            loop2 ()
-        | _ -> ()
-      in
-      loop2 ();
+      let pending = collect_rows stmt_p row_to_pending in
       ignore (Sqlite3.finalize stmt_p);
-      Ok (List.rev !resolved, List.rev !pending)
+      Ok (resolved, pending)
 
-let query_refs t ?source ?target ?rel () =
+let query_refs t ?source ?target ?rel ?limit ?offset () =
+  let filters = List.filter_map Fun.id [
+    Option.map (fun s -> (" AND r.source_lid = ?", Sqlite3.Data.TEXT (Lid.to_string s))) source;
+    Option.map (fun t -> (" AND r.target_lid = ?", Sqlite3.Data.TEXT (Lid.to_string t))) target;
+    Option.map (fun r -> (" AND r.rel_type = ?", Sqlite3.Data.TEXT (Ref.rel_to_string r))) rel;
+  ] in
+  let where_clause = String.concat "" (List.map fst filters) in
+  let bind_filters stmt start_idx =
+    List.iteri (fun i (_, v) -> ignore (Sqlite3.bind stmt (start_idx + i) v)) filters
+  in
+  (* Count total *)
+  let count_sql =
+    "SELECT COUNT(*) FROM refs r \
+     JOIN entities es ON es.lid = r.source_lid \
+     JOIN entities et ON et.lid = r.target_lid \
+     WHERE r.resolved = 1" ^ where_clause
+  in
+  let count_stmt = Sqlite3.prepare t.db count_sql in
+  bind_filters count_stmt 1;
+  let total = match Sqlite3.step count_stmt with
+    | Sqlite3.Rc.ROW -> Sqlite3.Data.to_int_exn (Sqlite3.column count_stmt 0)
+    | _ -> 0
+  in
+  ignore (Sqlite3.finalize count_stmt);
+  (* Fetch page *)
   let base =
     "SELECT r.source_lid, r.target_lid, r.rel_type, es.id, et.id FROM refs r \
      JOIN entities es ON es.lid = r.source_lid JOIN entities et ON et.lid = \
      r.target_lid WHERE r.resolved = 1"
   in
-  let clauses = ref [] in
-  let binds = ref [] in
-  let bind_idx = ref 1 in
-  (match source with
-  | Some s ->
-      let idx = !bind_idx in
-      clauses := Printf.sprintf " AND r.source_lid = ?%d" idx :: !clauses;
-      binds :=
-        (fun stmt ->
-          ignore (Sqlite3.bind stmt idx (Sqlite3.Data.TEXT (Lid.to_string s))))
-        :: !binds;
-      incr bind_idx
-  | None -> ());
-  (match target with
-  | Some tgt ->
-      let idx = !bind_idx in
-      clauses := Printf.sprintf " AND r.target_lid = ?%d" idx :: !clauses;
-      binds :=
-        (fun stmt ->
-          ignore (Sqlite3.bind stmt idx (Sqlite3.Data.TEXT (Lid.to_string tgt))))
-        :: !binds;
-      incr bind_idx
-  | None -> ());
-  (match rel with
-  | Some r ->
-      let idx = !bind_idx in
-      clauses := Printf.sprintf " AND r.rel_type = ?%d" idx :: !clauses;
-      binds :=
-        (fun stmt ->
-          ignore
-            (Sqlite3.bind stmt idx (Sqlite3.Data.TEXT (Ref.rel_to_string r))))
-        :: !binds;
-      incr bind_idx
-  | None -> ());
-  let sql = base ^ String.concat "" (List.rev !clauses) in
-  let stmt = Sqlite3.prepare t.db sql in
-  List.iter (fun f -> f stmt) (List.rev !binds);
-  let results = ref [] in
-  let rec loop () =
-    match Sqlite3.step stmt with
-    | Sqlite3.Rc.ROW ->
-        let src_s = Sqlite3.Data.to_string_exn (Sqlite3.column stmt 0) in
-        let tgt_s = Sqlite3.Data.to_string_exn (Sqlite3.column stmt 1) in
-        let rel_s = Sqlite3.Data.to_string_exn (Sqlite3.column stmt 2) in
-        let src_id = Sqlite3.Data.to_int_exn (Sqlite3.column stmt 3) in
-        let tgt_id = Sqlite3.Data.to_int_exn (Sqlite3.column stmt 4) in
-        (match
-           (Lid.of_string src_s, Lid.of_string tgt_s, Ref.rel_of_string rel_s)
-         with
-        | Ok source, Ok target, Some rel ->
-            results :=
-              Ref.
-                { source; target; rel; source_id = src_id; target_id = tgt_id }
-              :: !results
-        | _ -> ());
-        loop ()
-    | _ -> ()
+  let pagination = match limit with
+    | Some l ->
+      let o = Option.value offset ~default:0 in
+      Printf.sprintf " LIMIT %d OFFSET %d" l o
+    | None -> ""
   in
-  loop ();
+  let sql = base ^ where_clause ^ pagination in
+  let stmt = Sqlite3.prepare t.db sql in
+  bind_filters stmt 1;
+  let results = collect_rows stmt row_to_resolved in
   ignore (Sqlite3.finalize stmt);
-  Ok (List.rev !results)
+  Ok (results, total)
 
 let pending_refs t =
   let sql =
     "SELECT source_lid, target_lid, rel_type FROM refs WHERE resolved = 0"
   in
   let stmt = Sqlite3.prepare t.db sql in
-  let results = ref [] in
-  let rec loop () =
-    match Sqlite3.step stmt with
-    | Sqlite3.Rc.ROW ->
-        let src_s = Sqlite3.Data.to_string_exn (Sqlite3.column stmt 0) in
-        let tgt_s = Sqlite3.Data.to_string_exn (Sqlite3.column stmt 1) in
-        let rel_s = Sqlite3.Data.to_string_exn (Sqlite3.column stmt 2) in
-        (match
-           (Lid.of_string src_s, Lid.of_string tgt_s, Ref.rel_of_string rel_s)
-         with
-        | Ok source, Ok target, Some rel ->
-            results := Ref.{ source; target; rel } :: !results
-        | _ -> ());
-        loop ()
-    | _ -> ()
-  in
-  loop ();
+  let results = collect_rows stmt row_to_pending in
   ignore (Sqlite3.finalize stmt);
-  Ok (List.rev !results)
+  Ok results
 
 (* ---------- diagnostics ---------- *)
 
@@ -672,30 +441,17 @@ let stats t =
   | Error e, _, _ | _, Error e, _ | _, _, Error e -> Error e
 
 let all_lids t ?kind () =
-  let sql, binds =
-    match kind with
-    | Some k ->
-        ( "SELECT lid FROM entities WHERE kind = ? ORDER BY lid",
-          [
-            (fun stmt ->
-              ignore
-                (Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT (Lid.prefix_of_kind k))));
-          ] )
-    | None -> ("SELECT lid FROM entities ORDER BY lid", [])
+  let row_to_lid stmt =
+    let lid_s = Sqlite3.Data.to_string_exn (Sqlite3.column stmt 0) in
+    Result.to_option (Lid.of_string lid_s)
+  in
+  let sql, bind = match kind with
+    | Some k -> "SELECT lid FROM entities WHERE kind = ? ORDER BY lid",
+                Some (Sqlite3.Data.TEXT (Lid.prefix_of_kind k))
+    | None -> "SELECT lid FROM entities ORDER BY lid", None
   in
   let stmt = Sqlite3.prepare t.db sql in
-  List.iter (fun f -> f stmt) binds;
-  let results = ref [] in
-  let rec loop () =
-    match Sqlite3.step stmt with
-    | Sqlite3.Rc.ROW ->
-        let lid_s = Sqlite3.Data.to_string_exn (Sqlite3.column stmt 0) in
-        (match Lid.of_string lid_s with
-        | Ok lid -> results := lid :: !results
-        | Error _ -> ());
-        loop ()
-    | _ -> ()
-  in
-  loop ();
+  Option.iter (fun v -> ignore (Sqlite3.bind stmt 1 v)) bind;
+  let results = collect_rows stmt row_to_lid in
   ignore (Sqlite3.finalize stmt);
-  Ok (List.rev !results)
+  Ok results

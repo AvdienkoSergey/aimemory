@@ -4,8 +4,8 @@
     detail hidden behind [t].
 
     Type-driven contracts:
-    - [upsert] accepts [Entity.raw] (no PK) → returns [Entity.processed] (has PK)
-    - [insert_ref] accepts [Ref.pending] (unverified) → stores it
+    - [upsert] accepts [Entity.raw] (no PK) => returns [Entity.processed] (has PK)
+    - [insert_ref] accepts [Ref.pending] (unverified) => stores it
     - [resolve_all] returns [Ref.resolved] for successful, [Ref.pending] for
       waiting
     - You cannot construct [Entity.processed] without going through this module *)
@@ -65,11 +65,16 @@ val query_entities :
   t ->
   ?kind:Lid.kind ->
   ?pattern:string ->
+  ?limit:int ->
+  ?offset:int ->
   unit ->
-  (Entity.processed list, error) result
-(** Query entities with optional filters. [?kind] — filter by entity kind
-    (prefix of LID). [?pattern] — SQL LIKE pattern on the path portion, e.g.
-    ["auth/%"]. *)
+  (Entity.processed list * int, error) result
+(** Query entities with optional filters and pagination.
+    Returns [(items, total_count)].
+    [?kind] — filter by entity kind.
+    [?pattern] — SQL LIKE pattern on path.
+    [?limit] — max results.
+    [?offset] — skip first N. *)
 
 val delete : t -> Lid.t -> (bool, error) result
 (** Delete entity by LID. Also deletes all refs where this LID is source or
@@ -94,10 +99,13 @@ val query_refs :
   ?source:Lid.t ->
   ?target:Lid.t ->
   ?rel:Ref.rel ->
+  ?limit:int ->
+  ?offset:int ->
   unit ->
-  (Ref.resolved list, error) result
-(** Query refs with optional filters. Only returns resolved refs (both endpoints
-    exist). *)
+  (Ref.resolved list * int, error) result
+(** Query refs with optional filters and pagination.
+    Returns [(items, total_count)].
+    Only returns resolved refs (both endpoints exist). *)
 
 val pending_refs : t -> (Ref.pending list, error) result
 (** Get all pending (unresolved) refs. Useful for diagnostics. *)
@@ -115,3 +123,17 @@ val stats : t -> (stats, error) result
 
 val all_lids : t -> ?kind:Lid.kind -> unit -> (Lid.t list, error) result
 (** List all known LIDs, optionally filtered by kind. *)
+
+(** {1 JSON serialization} *)
+
+val value_to_json : Entity.value -> Yojson.Safe.t
+(** Convert domain value to JSON. *)
+
+val json_to_value : Yojson.Safe.t -> Entity.value
+(** Convert JSON to domain value. Assoc objects are stringified. *)
+
+val encode_data : Entity.data -> string
+(** Encode entity data to JSON string. *)
+
+val decode_data : string -> Entity.data
+(** Decode JSON string to entity data. *)

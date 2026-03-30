@@ -26,7 +26,7 @@ let emit_result_of_response = function
   | _ -> assert_failure "Expected Emit_result"
 
 let entities_of_response = function
-  | Protocol.Entities es -> es
+  | Protocol.Entities r -> r.items
   | Protocol.Error e ->
     (match e with
      | Protocol.Storage_error s -> assert_failure ("Storage error: " ^ s)
@@ -34,7 +34,7 @@ let entities_of_response = function
   | _ -> assert_failure "Expected Entities"
 
 let refs_of_response = function
-  | Protocol.Refs rs -> rs
+  | Protocol.Refs r -> r.items
   | Protocol.Error e ->
     (match e with
      | Protocol.Storage_error s -> assert_failure ("Storage error: " ^ s)
@@ -180,8 +180,10 @@ let test_process_batch_stops_on_error _ctx =
       ~lid:(lid_of_string "fn:b") ~data:[]
       ~refs:[(lid_of_string "fn:missing", Ref.Calls)] in
   let cmds = [
-    Protocol.Query_refs { source = None; target = None; rel_type = None };
-    Protocol.Query_entities { kind = None; pattern = None };
+    Protocol.Query_refs { source = None; target = None; rel_type = None;
+                          limit = None; offset = None };
+    Protocol.Query_entities { kind = None; pattern = None;
+                              limit = None; offset = None };
   ] in
   let responses = Ingest.process_batch db cmds in
   assert_equal 2 (List.length responses);
@@ -192,7 +194,8 @@ let test_process_all_collects_all _ctx =
   let _ = Ingest.emit_one db ~lid:(lid_of_string "fn:x") ~data:[] in
   let cmds = [
     Protocol.Emit { entities = [make_input "fn:y" ()] };
-    Protocol.Query_entities { kind = Some Lid.Fn; pattern = None };
+    Protocol.Query_entities { kind = Some Lid.Fn; pattern = None;
+                              limit = None; offset = None };
   ] in
   let responses = Ingest.process_all db cmds in
   assert_equal 2 (List.length responses);
@@ -236,33 +239,6 @@ let test_status_after_ops _ctx =
 
 
 (* ------------------------------------------------------------------ *)
-(*  Resolver: glob_matches                                             *)
-(* ------------------------------------------------------------------ *)
-
-let test_glob_matches_exact _ctx =
-  assert_bool "exact match" (Resolver.glob_matches ~pattern:"hello" "hello");
-  assert_bool "exact no match" (not (Resolver.glob_matches ~pattern:"hello" "world"))
-
-let test_glob_matches_star _ctx =
-  assert_bool "* matches all" (Resolver.glob_matches ~pattern:"*" "anything");
-  assert_bool "* matches empty" (Resolver.glob_matches ~pattern:"*" "")
-
-let test_glob_matches_prefix _ctx =
-  assert_bool "auth/* matches auth/login"
-    (Resolver.glob_matches ~pattern:"auth/*" "auth/login");
-  assert_bool "auth/* matches auth/"
-    (Resolver.glob_matches ~pattern:"auth/*" "auth/");
-  assert_bool "auth/* no match home"
-    (not (Resolver.glob_matches ~pattern:"auth/*" "home"))
-
-let test_glob_matches_suffix _ctx =
-  assert_bool "*.ts matches file.ts"
-    (Resolver.glob_matches ~pattern:"*.ts" "file.ts");
-  assert_bool "*.ts no match file.js"
-    (not (Resolver.glob_matches ~pattern:"*.ts" "file.js"))
-
-
-(* ------------------------------------------------------------------ *)
 (*  Resolver: resolve_pending                                          *)
 (* ------------------------------------------------------------------ *)
 
@@ -299,6 +275,59 @@ let test_resolve_pending_target_missing _ctx =
   | Error e ->
     Repo.close db;
     assert_failure (Repo.pp_error e)
+
+
+(* ------------------------------------------------------------------ *)
+(*  Pagination via process                                             *)
+(* ------------------------------------------------------------------ *)
+
+let test_query_entities_pagination _ctx =
+  let db = open_mem _ctx in
+  for i = 1 to 5 do
+    let _ = Ingest.emit_one db ~lid:(lid_of_string (Printf.sprintf "fn:e%d" i)) ~data:[] in ()
+  done;
+  let cmd = Protocol.Query_entities { kind = Some Lid.Fn; pattern = None;
+                                      limit = Some 2; offset = Some 0 } in
+  match Ingest.process db cmd with
+  | Protocol.Entities r ->
+    assert_equal 2 (List.length r.items);
+    assert_equal 5 r.page.total;
+    assert_equal true r.page.has_more;
+    Repo.close db
+  | _ -> assert_failure "Expected Entities"
+
+let test_query_entities_last_page _ctx =
+  let db = open_mem _ctx in
+  for i = 1 to 3 do
+    let _ = Ingest.emit_one db ~lid:(lid_of_string (Printf.sprintf "fn:e%d" i)) ~data:[] in ()
+  done;
+  let cmd = Protocol.Query_entities { kind = Some Lid.Fn; pattern = None;
+                                      limit = Some 2; offset = Some 2 } in
+  match Ingest.process db cmd with
+  | Protocol.Entities r ->
+    assert_equal 1 (List.length r.items);
+    assert_equal 3 r.page.total;
+    assert_equal false r.page.has_more;
+    Repo.close db
+  | _ -> assert_failure "Expected Entities"
+
+let test_query_refs_pagination _ctx =
+  let db = open_mem _ctx in
+  let lid_t = lid_of_string "fn:target" in
+  let _ = Ingest.emit_one db ~lid:lid_t ~data:[] in
+  for i = 1 to 4 do
+    let src = lid_of_string (Printf.sprintf "fn:src%d" i) in
+    let _ = Ingest.emit_with_refs db ~lid:src ~data:[] ~refs:[(lid_t, Ref.Calls)] in ()
+  done;
+  let cmd = Protocol.Query_refs { source = None; target = Some lid_t; rel_type = None;
+                                  limit = Some 2; offset = Some 0 } in
+  match Ingest.process db cmd with
+  | Protocol.Refs r ->
+    assert_equal 2 (List.length r.items);
+    assert_equal 4 r.page.total;
+    assert_equal true r.page.has_more;
+    Repo.close db
+  | _ -> assert_failure "Expected Refs"
 
 
 (* ------------------------------------------------------------------ *)
@@ -357,14 +386,13 @@ let suite =
     "process_all_collects" >:: test_process_all_collects_all;
     "status_empty" >:: test_status_empty;
     "status_after_ops" >:: test_status_after_ops;
-    "glob_exact" >:: test_glob_matches_exact;
-    "glob_star" >:: test_glob_matches_star;
-    "glob_prefix" >:: test_glob_matches_prefix;
-    "glob_suffix" >:: test_glob_matches_suffix;
     "resolve_pending_all_exist" >:: test_resolve_pending_all_exist;
     "resolve_pending_target_missing" >:: test_resolve_pending_target_missing;
     "analyze_pending_empty" >:: test_analyze_pending_empty;
     "analyze_pending_missing" >:: test_analyze_pending_missing;
+    "query_entities_pagination" >:: test_query_entities_pagination;
+    "query_entities_last_page" >:: test_query_entities_last_page;
+    "query_refs_pagination" >:: test_query_refs_pagination;
   ]
 
 let () = run_test_tt_main suite

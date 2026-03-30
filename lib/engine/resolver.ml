@@ -4,7 +4,7 @@
     diagnostics, and pattern-based entity lookup.
 
     Type contracts:
-    - [resolve] takes [Ref.pending list] → partitions into
+    - [resolve] takes [Ref.pending list] => partitions into
       [Ref.resolved list * Ref.pending list]
     - Resolution is idempotent — calling twice yields same result
     - All IO goes through [Repo.t], no direct SQLite access *)
@@ -51,7 +51,7 @@ let resolve_all (db : Repo.t) : (resolution_result, Repo.error) result =
     right after inserting new refs from a single AI response. *)
 let resolve_pending (db : Repo.t) (refs : Ref.pending list)
     : (resolution_result, Repo.error) result =
-  (* Build a lookup cache: LID → physical ID *)
+  (* Build a lookup cache: LID => physical ID *)
   let cache : (string, int) Hashtbl.t = Hashtbl.create 64 in
   let lookup lid =
     let key = Lid.to_string lid in
@@ -85,32 +85,8 @@ let resolve_pending (db : Repo.t) (refs : Ref.pending list)
   loop [] [] refs
 
 
-(** {1 Pattern matching} *)
-
-(** Simple glob matcher: supports [*] as wildcard.
-    Used for entity queries like ["auth/*"]. *)
-let glob_matches ~pattern s =
-  (* Convert glob to a simple check *)
-  if String.equal pattern "*" then true
-  else if String.length pattern = 0 then String.length s = 0
-  else
-    let pat_len = String.length pattern in
-    (* Check for trailing * *)
-    if pattern.[pat_len - 1] = '*' then
-      let prefix = String.sub pattern 0 (pat_len - 1) in
-      let plen = String.length prefix in
-      String.length s >= plen && String.sub s 0 plen = prefix
-    (* Check for leading * *)
-    else if pattern.[0] = '*' then
-      let suffix = String.sub pattern 1 (pat_len - 1) in
-      let slen = String.length suffix in
-      let s_len = String.length s in
-      s_len >= slen && String.sub s (s_len - slen) slen = suffix
-    (* Exact match *)
-    else String.equal pattern s
-
 (** Convert a glob pattern to SQL LIKE pattern.
-    ["auth/*"] → ["auth/%"] *)
+    ["auth/*"] => ["auth/%"] *)
 let glob_to_like pattern =
   let buf = Buffer.create (String.length pattern) in
   String.iter (fun c ->
@@ -123,19 +99,42 @@ let glob_to_like pattern =
   ) pattern;
   Buffer.contents buf
 
+let default_limit = 100
+let max_limit = 1000
+
+let effective_limit limit =
+  match limit with
+  | None -> Some default_limit
+  | Some l -> Some (min l max_limit)
+
 (** Query entities using protocol's [entity_query] with glob support. *)
 let query_entities (db : Repo.t) (q : Protocol.entity_query)
-    : (Entity.processed list, Repo.error) result =
+    : (Protocol.entities_result, Repo.error) result =
   let pattern = match q.pattern with
     | Some p -> Some (glob_to_like p)
     | None -> None
   in
-  Repo.query_entities db ?kind:q.kind ?pattern ()
+  let limit = effective_limit q.limit in
+  match Repo.query_entities db ?kind:q.kind ?pattern ?limit ?offset:q.offset () with
+  | Ok (items, total) ->
+    let count = List.length items in
+    let offset = Option.value q.offset ~default:0 in
+    let has_more = offset + count < total in
+    Ok Protocol.{ items; page = { total; has_more } }
+  | Error e -> Error e
 
 (** Query refs using protocol's [ref_query]. *)
 let query_refs (db : Repo.t) (q : Protocol.ref_query)
-    : (Ref.resolved list, Repo.error) result =
-  Repo.query_refs db ?source:q.source ?target:q.target ?rel:q.rel_type ()
+    : (Protocol.refs_result, Repo.error) result =
+  let limit = effective_limit q.limit in
+  match Repo.query_refs db ?source:q.source ?target:q.target ?rel:q.rel_type
+          ?limit ?offset:q.offset () with
+  | Ok (items, total) ->
+    let count = List.length items in
+    let offset = Option.value q.offset ~default:0 in
+    let has_more = offset + count < total in
+    Ok Protocol.{ items; page = { total; has_more } }
+  | Error e -> Error e
 
 
 (** {1 Diagnostics} *)

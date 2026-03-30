@@ -72,10 +72,27 @@ let process_query_refs (db : Repo.t) (q : Protocol.ref_query)
 (** Process a single command. *)
 let process (db : Repo.t) (cmd : Protocol.command)
     : Protocol.response =
-  match cmd with
-  | Emit { entities } -> process_emit db entities
-  | Query_entities q -> process_query_entities db q
-  | Query_refs q -> process_query_refs db q
+  let cmd_name = match cmd with
+    | Emit { entities } -> Printf.sprintf "emit (%d entities)" (List.length entities)
+    | Query_entities _ -> "query_entities"
+    | Query_refs _ -> "query_refs"
+  in
+  Log.debug (fun m -> m "processing command: %s" cmd_name);
+  let result = match cmd with
+    | Emit { entities } -> process_emit db entities
+    | Query_entities q -> process_query_entities db q
+    | Query_refs q -> process_query_refs db q
+  in
+  (match result with
+   | Protocol.Error e ->
+       let msg = match e with
+         | Protocol.Invalid_lid (s, _) -> "invalid lid: " ^ s
+         | Protocol.Storage_error s -> "storage error: " ^ s
+         | Protocol.Unknown_command s -> "unknown command: " ^ s
+       in
+       Log.warn (fun m -> m "command %s failed: %s" cmd_name msg)
+   | _ -> ());
+  result
 
 
 (** {1 Batch processing} *)
@@ -129,22 +146,26 @@ let emit_with_refs (db : Repo.t) ~lid ~data ~refs
 (** Query all entities of a specific kind. *)
 let query_by_kind (db : Repo.t) (kind : Lid.kind)
     : Protocol.response =
-  process db (Query_entities { kind = Some kind; pattern = None })
+  process db (Query_entities { kind = Some kind; pattern = None;
+                               limit = None; offset = None })
 
 (** Query entities matching a glob pattern. *)
 let query_by_pattern (db : Repo.t) ?kind (pattern : string)
     : Protocol.response =
-  process db (Query_entities { kind; pattern = Some pattern })
+  process db (Query_entities { kind; pattern = Some pattern;
+                               limit = None; offset = None })
 
 (** Get all refs originating from a given entity. *)
 let outgoing_refs (db : Repo.t) (source : Lid.t)
     : Protocol.response =
-  process db (Query_refs { source = Some source; target = None; rel_type = None })
+  process db (Query_refs { source = Some source; target = None; rel_type = None;
+                           limit = None; offset = None })
 
 (** Get all refs pointing to a given entity. *)
 let incoming_refs (db : Repo.t) (target : Lid.t)
     : Protocol.response =
-  process db (Query_refs { source = None; target = Some target; rel_type = None })
+  process db (Query_refs { source = None; target = Some target; rel_type = None;
+                           limit = None; offset = None })
 
 
 (** {1 Diagnostics} *)

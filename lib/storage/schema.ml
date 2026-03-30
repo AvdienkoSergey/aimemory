@@ -1,5 +1,14 @@
 (** Database schema DDL. Single source of truth for table structure. Used by
-    [Repo] during [open_db] migration. *)
+    [Repo] during [open_db] migration.
+
+    NOTE: No migration logic implemented. Current approach uses CREATE IF NOT
+    EXISTS which handles additive changes only. This is acceptable for v0.1.0:
+    - Data is ephemeral (AI can re-emit entities)
+    - Schema is unstable, breaking changes expected
+    - No production deployments yet
+
+    When migrations become necessary (ALTER TABLE, production users with
+    persistent data), implement version check in meta table + incremental DDL. *)
 
 let version = 1
 

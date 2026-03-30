@@ -1,4 +1,4 @@
 (executable
  (public_name aimemory)
  (name main)
- (libraries domain storage engine api))
+ (libraries support domain storage engine api logs))

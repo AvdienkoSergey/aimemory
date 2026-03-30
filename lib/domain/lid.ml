@@ -1,5 +1,6 @@
 type t = { kind : kind; path : string } [@@deriving compare, equal, hash]
 
+(* When adding a new variant: update prefix_of_kind, kind_of_prefix, AND all_kinds *)
 and kind =
   | Comp
   | View
@@ -64,6 +65,9 @@ let prefix_of_kind = function
   | Typ -> "type"
   | Provide -> "provide"
 
+(* IMPORTANT: Update this list when adding a new kind variant!
+   The compiler won't warn — pattern matching in prefix_of_kind/kind_of_prefix
+   will catch missing cases, but this list must be updated manually. *)
 let all_kinds =
   [
     Comp;
@@ -158,7 +162,7 @@ module T = struct
   type nonrec t = t
 
   let compare = compare
-  let sexp_of_t t = Sexplib0.Sexp.Atom (to_string t)
+  let _sexp_of_t t = Sexplib0.Sexp.Atom (to_string t)
 end
 
 module Map = Map.Make (T)

@@ -3,7 +3,7 @@
     This module is the boundary between JSON (AI world) and typed
     domain (OCaml world). It provides:
 
-    - [dispatch]: tool_name × JSON args → JSON result
+    - [dispatch]: tool_name × JSON args => JSON result
     - [tool_schemas]: exportable tool definitions for system prompts
     - JSON ↔ domain type conversion (private)
 
@@ -14,33 +14,16 @@ open Yojson.Safe
 
 (** {1 JSON ↔ Domain converters} *)
 
-(** Convert [Entity.value] → [Yojson.Safe.t] *)
-let rec value_to_json : Entity.value -> t = function
-  | Entity.String s -> `String s
-  | Entity.Int i    -> `Int i
-  | Entity.Float f  -> `Float f
-  | Entity.Bool b   -> `Bool b
-  | Entity.Null     -> `Null
-  | Entity.List vs  -> `List (List.map value_to_json vs)
+let value_to_json = Repo.value_to_json
+let json_to_value = Repo.json_to_value
 
-(** Convert [Yojson.Safe.t] → [Entity.value] *)
-let rec json_to_value : t -> Entity.value = function
-  | `String s -> Entity.String s
-  | `Int i    -> Entity.Int i
-  | `Float f  -> Entity.Float f
-  | `Bool b   -> Entity.Bool b
-  | `Null     -> Entity.Null
-  | `List vs  -> Entity.List (List.map json_to_value vs)
-  | `Assoc _  -> Entity.String (Yojson.Safe.to_string (`Assoc []))
-  | other     -> Entity.String (Yojson.Safe.to_string other)
-
-(** Convert JSON object → [Entity.data] *)
+(** Convert JSON object => [Entity.data] *)
 let json_to_data (j : t) : Entity.data =
   match j with
   | `Assoc pairs -> List.map (fun (k, v) -> (k, json_to_value v)) pairs
   | _ -> []
 
-(** Convert [Entity.data] → JSON object *)
+(** Convert [Entity.data] => JSON object *)
 let data_to_json (d : Entity.data) : t =
   `Assoc (List.map (fun (k, v) -> (k, value_to_json v)) d)
 
@@ -105,19 +88,23 @@ let response_to_json (resp : Protocol.response) : t =
       ("refs_resolved", `List (List.map resolved_ref_to_json r.refs_resolved));
       ("refs_pending", `List (List.map pending_ref_to_json r.refs_pending));
     ]
-  | Entities es ->
+  | Entities r ->
     `Assoc [
       ("status", `String "ok");
       ("command", `String "query_entities");
-      ("entities", `List (List.map entity_to_json es));
-      ("count", `Int (List.length es));
+      ("entities", `List (List.map entity_to_json r.items));
+      ("count", `Int (List.length r.items));
+      ("total", `Int r.page.total);
+      ("has_more", `Bool r.page.has_more);
     ]
-  | Refs rs ->
+  | Refs r ->
     `Assoc [
       ("status", `String "ok");
       ("command", `String "query_refs");
-      ("refs", `List (List.map resolved_ref_to_json rs));
-      ("count", `Int (List.length rs));
+      ("refs", `List (List.map resolved_ref_to_json r.items));
+      ("count", `Int (List.length r.items));
+      ("total", `Int r.page.total);
+      ("has_more", `Bool r.page.has_more);
     ]
   | Error e ->
     let msg = match e with
@@ -201,9 +188,14 @@ let parse_emit (j : t) : (Protocol.command, string) result =
        | Error e -> Error e)
   | _ -> Error "emit: expected JSON object"
 
+let parse_int_opt key fields =
+  match List.assoc_opt key fields with
+  | Some (`Int n) -> Some n
+  | _ -> None
+
 (** Parse a query_entities command.
-    Expected: { "kind": "fn", "pattern": "auth/*" }
-    Both fields optional. *)
+    Expected: { "kind": "fn", "pattern": "auth/*", "limit": 50, "offset": 0 }
+    All fields optional. *)
 let parse_query_entities (j : t) : (Protocol.command, string) result =
   match j with
   | `Assoc fields ->
@@ -215,13 +207,14 @@ let parse_query_entities (j : t) : (Protocol.command, string) result =
       | Some (`String s) -> Some s
       | _ -> None
     in
-    Ok (Protocol.Query_entities { kind; pattern })
+    let limit = parse_int_opt "limit" fields in
+    let offset = parse_int_opt "offset" fields in
+    Ok (Protocol.Query_entities { kind; pattern; limit; offset })
   | _ ->
-    (* No args = query all *)
     Ok (Protocol.Query_entities Protocol.query_all_entities)
 
 (** Parse a query_refs command.
-    Expected: { "source": "fn:...", "target": "mod:...", "rel": "calls" }
+    Expected: { "source": "fn:...", "target": "mod:...", "rel": "calls", "limit": 50 }
     All fields optional. *)
 let parse_query_refs (j : t) : (Protocol.command, string) result =
   match j with
@@ -241,7 +234,9 @@ let parse_query_refs (j : t) : (Protocol.command, string) result =
          | Some r -> rel_of_json r
          | None -> None
        in
-       Ok (Protocol.Query_refs { source; target; rel_type })
+       let limit = parse_int_opt "limit" fields in
+       let offset = parse_int_opt "offset" fields in
+       Ok (Protocol.Query_refs { source; target; rel_type; limit; offset })
      | Error e, _ | _, Error e -> Error e)
   | _ ->
     Ok (Protocol.Query_refs Protocol.query_all_refs)
@@ -251,12 +246,13 @@ let parse_query_refs (j : t) : (Protocol.command, string) result =
 
 (** Error response as JSON string *)
 let json_error msg =
+  Log.warn (fun m -> m "tool error: %s" msg);
   Yojson.Safe.to_string (`Assoc [
     ("status", `String "error");
     ("message", `String msg);
   ])
 
-(** Main dispatch: tool_name × JSON string → JSON string.
+(** Main dispatch: tool_name × JSON string => JSON string.
     This is the function your OCaml program calls when AI
     invokes a tool. *)
 let dispatch (db : Repo.t) ~(tool : string) ~(args : string)
@@ -333,9 +329,11 @@ let tool_schemas () : t =
                     ("type", `String "string");
                     ("description", `String
                        "Logical ID in format 'kind:path'. \
-                        Kinds: mod, fn, type, dep, file. \
-                        Examples: 'mod:auth/login', 'fn:auth/login/validate', \
-                        'type:models/user', 'dep:jwt', 'file:src/main.ml'");
+                        Module kinds: comp, view, layout, store, service, composable, \
+                        util, api, dep. Inner kinds: fn, state, computed, action, \
+                        prop, emit, hook, type. \
+                        Examples: 'comp:ui/Button', 'fn:useAuth/login', \
+                        'store:cart', 'dep:lodash'");
                   ]);
                   ("data", `Assoc [
                     ("type", `String "object");
@@ -360,8 +358,12 @@ let tool_schemas () : t =
                             ["belongs_to"; "calls"; "depends_on";
                              "contains"; "implements"; "references"]));
                           ("description", `String
-                             "Relationship type: belongs_to, calls, \
-                              depends_on, contains, implements, references");
+                             "belongs_to: parent-child (fn in composable). \
+                              calls: function invocation. \
+                              depends_on: import/require. \
+                              contains: structural nesting (file contains fn). \
+                              implements: type conformance. \
+                              references: generic fallback.");
                         ]);
                       ]);
                     ]);
@@ -385,15 +387,27 @@ let tool_schemas () : t =
           ("properties", `Assoc [
             ("kind", `Assoc [
               ("type", `String "string");
-              ("enum", `List (List.map (fun s -> `String s)
-                ["mod"; "fn"; "type"; "dep"; "file"]));
-              ("description", `String "Filter by entity kind");
+              ("enum", `List (List.map (fun k -> `String (Lid.prefix_of_kind k))
+                Lid.all_kinds));
+              ("description", `String
+                 "Filter by entity kind. Module: comp, view, store, composable, \
+                  service, util, api, dep. Inner: fn, state, computed, prop, type.");
             ]);
             ("pattern", `Assoc [
               ("type", `String "string");
               ("description", `String
                  "Glob pattern on the path portion. \
                   Use * as wildcard. Examples: 'auth/*', '*/login', '*'");
+            ]);
+            ("limit", `Assoc [
+              ("type", `String "integer");
+              ("description", `String
+                 "Max results to return. Default 100, max 1000.");
+            ]);
+            ("offset", `Assoc [
+              ("type", `String "integer");
+              ("description", `String
+                 "Skip first N results for pagination.");
             ]);
           ]);
         ]);
@@ -421,7 +435,19 @@ let tool_schemas () : t =
               ("enum", `List (List.map (fun s -> `String s)
                 ["belongs_to"; "calls"; "depends_on";
                  "contains"; "implements"; "references"]));
-              ("description", `String "Filter by relationship type");
+              ("description", `String
+                 "Filter by rel. calls: who calls what. depends_on: imports. \
+                  contains: nesting. belongs_to: parent. implements: types.");
+            ]);
+            ("limit", `Assoc [
+              ("type", `String "integer");
+              ("description", `String
+                 "Max results to return. Default 100, max 1000.");
+            ]);
+            ("offset", `Assoc [
+              ("type", `String "integer");
+              ("description", `String
+                 "Skip first N results for pagination.");
             ]);
           ]);
         ]);
