@@ -22,8 +22,11 @@ _opam/
 Thumbs.db
 
 # Test databases
-*.db
+*.db*
 test_*.db
+
+# Logs
+*.log
 
 # AI assistent
 .claude
