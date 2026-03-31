@@ -11,6 +11,9 @@ Usage:
   aimemory schemas                     Print tool schemas for system prompt
   aimemory status                      Show database status
   aimemory reset                       Delete database and start fresh
+  aimemory mcp                         Start MCP server (stdio JSON-RPC)
+  aimemory kinds                       List all entity kinds
+  aimemory rels                        List all relation types
 
 Options:
   --db <path>       Use custom database path (default: context.db)
@@ -72,6 +75,19 @@ let cmd_reset () =
   end else
     Printf.printf "No database at %s\n" !db_path
 
+let cmd_mcp () =
+  with_db (fun db -> Mcp_server.run db)
+
+let cmd_kinds () =
+  List.iter (fun k ->
+    Printf.printf "%s\n" (Lid.prefix_of_kind k)
+  ) Lid.all_kinds
+
+let cmd_rels () =
+  List.iter (fun r ->
+    Printf.printf "%s\n" (Ref.rel_to_string r)
+  ) Ref.all_rels
+
 (* Parse options from args, return remaining args *)
 let rec parse_options = function
   | "--db" :: path :: rest ->
@@ -90,6 +106,9 @@ let run_command = function
   | ["schemas"] -> cmd_schemas ()
   | ["status"] -> cmd_status ()
   | ["reset"] -> cmd_reset ()
+  | ["mcp"] -> cmd_mcp ()
+  | ["kinds"] -> cmd_kinds ()
+  | ["rels"] -> cmd_rels ()
   | _ ->
       print_endline usage;
       exit 1
