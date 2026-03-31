@@ -1,0 +1,11 @@
+# Default owner for everything in the repo
+* @AvdienkoSergey
+
+# Domain layer — core types
+/lib/domain/ @AvdienkoSergey
+
+# Storage layer — SQLite
+/lib/storage/ @AvdienkoSergey
+
+# API layer — MCP server
+/lib/api/ @AvdienkoSergey
