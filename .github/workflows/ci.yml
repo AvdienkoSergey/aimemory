@@ -92,11 +92,11 @@ jobs:
         run: |
           echo '## Coverage Report' >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          opam exec -- bisect-ppx-report summary >> "$GITHUB_STEP_SUMMARY"
+          opam exec -- bisect-ppx-report summary _build/default/*.coverage >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Generate HTML report
-        run: opam exec -- bisect-ppx-report html -o _coverage
+        run: opam exec -- bisect-ppx-report html -o _coverage _build/default/*.coverage
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
