@@ -1,149 +1,125 @@
 # aimemory
 
-Контекстная память для AI-агентов. SQLite-хранилище сущностей кода и связей между ними.
+Context memory for AI agents. SQLite storage for entities and relations between them. It works with any domain — you can change the vocabulary to fit your project.
 
-**Версия:** 0.1.0
+## Why
 
-## Недавние изменения
+AI agent saves entities and relations into a graph, then answers questions about this graph. Out of the box it is set up for frontend (Vue/React), but you can change the kind types and relations for any stack — see [customization-guide.md](docs/customization-guide.md).
 
-### Логирование (`lib/support/`)
-- Новый модуль `Log` на базе `logs` + `fmt`
-- Логи пишутся в файл `<db_name>.log` (например, `context.log` для `context.db`)
-- CLI флаги: `--verbose` (debug), `--quiet` (только stderr ошибки)
+Examples of what you can build:
 
-### Property-based тесты
-- Добавлены `qcheck-core` и `qcheck-ounit`
-- Новые тесты: `test/test_prop.ml`, `test/test_log.ml`
+- **Frontend / backend code** — "who calls `fn:auth/login`?", "which components depend on `store:cart`?"
+- **Microservices** — describe services, databases, queues as entities, connect them with `depends_on`. Ask: "which services will go down if `db:orders-pg` is not available?"
+- **API contracts** — save endpoint schemas and their consumers. "If we change `schema:OrderResponse` — which clients will break?"
+- **CI/CD pipelines** — describe stages, jobs, dependencies between repos. "Why are releases slow?" → AI sees that 6 teams wait for merges into one repo and suggests federation
+- **Infrastructure** — servers, DNS, certificates, load balancers. "What will be affected by rotating `cert:api-gateway-tls`?"
 
-### CLI улучшения
-```bash
-aimemory --verbose call emit '...'  # debug logging
-aimemory --quiet status             # без логов
-aimemory --db custom.db status      # кастомный путь
-```
+## Architecture Decisions (ADR)
 
-### Улучшенные tool descriptions
-- Расширенные enum-описания для AI в `query_entities` и `query_refs`
-- Более детальные описания relationship types
+Key decisions are in [docs/adr/](docs/adr/):
 
-### Рефакторинг
-- JSON конвертеры (`value_to_json`/`json_to_value`) перенесены в `Repo`
-- `glob_matches` убран из Resolver — используется SQL LIKE
-- Сокращены комментарии в domain layer (убраны verbose примеры)
-
-## Зачем это нужно
-
-AI-агент анализирует код и сохраняет информацию о структуре проекта: компоненты, функции, хуки, сторы. Когда агент видит новый файл, он может спросить: "кто использует эту функцию?" или "какие компоненты зависят от этого стора?".
-
-Сейчас система заточена под **фронтенд-проекты** (Vue/React). Kind-типы отражают типичную архитектуру: `comp`, `view`, `store`, `composable`, `hook` и т.д. При необходимости можно расширить набор kind под свой стек.
-
-## Архитектурные решения (ADR)
-
-Ключевые решения задокументированы в [docs/adr/](docs/adr/):
-
-| ADR | Решение |
-|-----|---------|
-| [001](docs/adr/001-lid-format.md) | Формат LID (`kind:path`) вместо UUID |
-| [002](docs/adr/002-pending-refs.md) | Pending refs как нормальное состояние |
-| [003](docs/adr/003-flat-entity-data.md) | Плоская структура entity.data |
+| ADR | Decision |
+|-----|----------|
+| [001](docs/adr/001-lid-format.md) | LID format (`kind:path`) instead of UUID |
+| [002](docs/adr/002-pending-refs.md) | Pending refs as a normal state |
+| [003](docs/adr/003-flat-entity-data.md) | Flat entity.data structure |
 | [004](docs/adr/004-type-contracts.md) | Type contracts (raw vs processed) |
-| [005](docs/adr/005-layered-architecture.md) | Слоистая архитектура |
-| [006](docs/adr/006-typed-errors.md) | Типизированные ошибки |
-| [007](docs/adr/007-pagination.md) | Пагинация запросов |
+| [005](docs/adr/005-layered-architecture.md) | Layered architecture |
+| [006](docs/adr/006-typed-errors.md) | Typed errors |
+| [007](docs/adr/007-pagination.md) | Query pagination |
+| [008](docs/adr/008-mcp-stdio-transport.md) | MCP via stdio JSON-RPC |
 
-## Руководство по интеграции
+## Documentation
 
-Подробное руководство по использованию: **[docs/usage-guide.md](docs/usage-guide.md)**
+- **[docs/usage-guide.md](docs/usage-guide.md)** — installation, MCP setup for Claude Code / Claude Desktop, prompts for first analysis
+- **[docs/customization-guide.md](docs/customization-guide.md)** — how to add or remove kind and relation types for your stack
+- **[docs/example-go-rest-api.md](docs/example-go-rest-api.md)** — full example for a Go backend project
 
-- MCP интеграция с Claude Desktop / Claude Code
-- Bash-скрипты и CLAUDE.md
-- Расширение через npx AST-анализатор
-- Промпты для AI-агентов
-
-## Архитектура
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                      API Layer                          │
+│  Mcp_server: JSON-RPC 2.0 stdio (aimemory mcp)          │
 │  Tools.dispatch: JSON => Protocol.command => JSON result  │
 └─────────────────────────────────────────────────────────┘
                             │
 ┌─────────────────────────────────────────────────────────┐
 │                    Engine Layer                         │
-│  Ingest: обрабатывает команды, оркестрирует pipeline    │
-│  Resolver: резолвит pending refs, glob-запросы          │
+│  Ingest: runs commands, orchestrates the pipeline       │
+│  Resolver: resolves pending refs and glob queries       │
 └─────────────────────────────────────────────────────────┘
                             │
 ┌─────────────────────────────────────────────────────────┐
 │                   Storage Layer                         │
-│  Repo: SQLite CRUD, транзакции, миграции                │
-│  Schema: DDL таблиц entities, refs, meta                │
+│  Repo: SQLite CRUD, transactions, migrations            │
+│  Schema: DDL for entities, refs, meta tables            │
 └─────────────────────────────────────────────────────────┘
                             │
 ┌─────────────────────────────────────────────────────────┐
 │                    Domain Layer                         │
-│  Lid: kind:path идентификаторы (comp:ui/Button)         │
-│  Entity: raw => processed с timestamps                   │
-│  Ref: pending => resolved связи между сущностями         │
-│  Protocol: command/response типы для AI                 │
+│  Lid: kind:path identifiers (comp:ui/Button)            │
+│  Entity: raw => processed with timestamps               │
+│  Ref: pending => resolved relations between entities    │
+│  Protocol: command/response types for AI                │
 └─────────────────────────────────────────────────────────┘
                             │
 ┌─────────────────────────────────────────────────────────┐
 │                   Support Layer                         │
-│  Log: структурированное логирование в файл              │
+│  Log: structured logging to file                        │
 └─────────────────────────────────────────────────────────┘
 ```
 
-## Почему OCaml
+## Why OCaml
 
-**Не Go:** Задача — классифицировать сущности (`comp`, `store`, `fn`...) и связи (`calls`, `depends_on`...). В Go это строки — опечатался и узнал в runtime. В OCaml это варианты — добавил новый kind, компилятор показал все места где забыл обработать.
+**Not Go:** The task is to classify entities (`comp`, `store`, `fn`...) and relations (`calls`, `depends_on`...). In Go these are strings — a typo and you find out at runtime. In OCaml these are variants — add a new kind and the compiler shows every place where you forgot to handle it.
 
-**Не Rust:** Та же type safety, но без борьбы с borrow checker. Здесь нет сложного управления памятью — данные пришли, сохранились в SQLite, ушли. Lifetime annotations были бы чистым оверхедом.
+**Not Rust:** Same type safety, but no fighting with the borrow checker. There is no complex memory management here — data comes in, gets saved to SQLite, goes out. Lifetime annotations would be pure overhead.
 
-**Итог:** Exhaustive pattern matching + ADT = компилятор ловит забытые случаи. Для domain-heavy кода с фиксированным набором категорий — то что нужно.
+**Result:** Exhaustive pattern matching + ADT = the compiler catches forgotten cases. For domain-heavy code with a fixed set of categories — exactly what is needed.
 
-## Ключевые концепции
+## Key Concepts
 
 ### LID (Logical ID)
 
-Уникальный идентификатор сущности: `kind:path`
+Unique identifier for an entity: `kind:path`
 
 ```
-comp:ui/Button        — компонент
-fn:useAuth:login      — функция внутри composable
+comp:ui/Button        — component
+fn:useAuth:login      — function inside a composable
 store:cart            — Pinia store
-type:UserDto          — TypeScript тип
-dep:lodash            — внешняя зависимость
+type:UserDto          — TypeScript type
+dep:lodash            — external dependency
 ```
 
-### Kind (тип сущности)
+### Kind (entity type)
 
-Текущий набор оптимизирован под Vue/фронтенд:
+Default set is for Vue/frontend:
 
-**Уровень модуля:**
-- `comp` — компонент
-- `view` — страница роутера
-- `layout` — layout-обёртка
+**Module level:**
+- `comp` — component
+- `view` — router page
+- `layout` — layout wrapper
 - `store` — Pinia/Vuex store
 - `composable` — Vue composable
-- `service` — сервисный слой
-- `util` — утилиты
+- `service` — service layer
+- `util` — utilities
 - `api` — API endpoint
-- `dep` — npm-пакет
+- `dep` — npm package
 
-**Уровень внутри модуля:**
-- `fn` — функция/метод
-- `state` — реактивное состояние
-- `computed` — вычисляемое свойство
-- `action` — action в сторе
-- `prop` — входной пропс
-- `emit` — событие компонента
+**Inside a module:**
+- `fn` — function/method
+- `state` — reactive state
+- `computed` — computed property
+- `action` — store action
+- `prop` — input prop
+- `emit` — component event
 - `hook` — lifecycle hook
-- `type` — TypeScript тип/интерфейс
+- `type` — TypeScript type/interface
 
-### Ref (связь)
+### Ref (relation)
 
-Направленная связь между двумя сущностями:
+A directed relation between two entities:
 
 ```
 Button -[calls]-> fetchUsers
@@ -151,72 +127,74 @@ useAuth -[depends_on]-> authStore
 Modal -[contains]-> CloseButton
 ```
 
-Типы связей: `belongs_to`, `calls`, `depends_on`, `contains`, `implements`, `references`
+Relation types: `belongs_to`, `calls`, `depends_on`, `contains`, `implements`, `renders`, `references`
 
 ### Pending vs Resolved
 
-AI может описывать код в любом порядке. Если связь ссылается на несуществующую сущность — она сохраняется как `pending`. Когда целевая сущность появится — связь автоматически станет `resolved`.
+AI can describe code in any order. If a relation points to an entity that does not exist yet — it is saved as `pending`. When the target entity appears — the relation becomes `resolved` automatically.
 
-## Использование
+## Usage
 
 ### CLI
 
 ```bash
-# Сохранить сущность
+# Save an entity
 aimemory call emit '{"entities":[{"lid":"fn:auth/login","data":{"async":true}}]}'
 
-# Запросить все функции
+# Query all functions
 aimemory call query_entities '{"kind":"fn"}'
 
-# Найти связи от сущности
+# Find relations from an entity
 aimemory call query_refs '{"source":"fn:auth/login"}'
 
-# Статус базы
+# Database status
 aimemory status
 
-# Сбросить базу
+# Reset the database
 aimemory reset
 
-# С логированием
+# MCP server (stdio JSON-RPC for Claude Code / Claude Desktop)
+aimemory mcp
+
+# See available kind and relation types
+aimemory kinds
+aimemory rels
+
+# Tool schemas for system prompt
+aimemory schemas
+
+# With logging
 aimemory --verbose call emit '...'
 aimemory --quiet status
 ```
 
 ### MCP Tools
 
-Система предоставляет tool-схемы для интеграции с AI:
-
-```bash
-aimemory schemas
-```
+MCP server (`aimemory mcp`) gives AI agents access to tools via JSON-RPC 2.0 stdio. Setup instructions are in [usage-guide.md](docs/usage-guide.md).
 
 Tools:
-- `emit` — upsert сущностей со связями
-- `query_entities` — поиск по kind/pattern
-- `query_refs` — поиск связей
-- `status` — диагностика (сколько entities, resolved/pending refs)
+- `emit` — upsert entities with relations
+- `query_entities` — search by kind/pattern
+- `query_refs` — search relations
+- `status` — diagnostics (how many entities, resolved/pending refs)
 
-## Расширение под свой стек
+## Adapt to Your Stack or Your Tasks
 
-Kind-типы определены в `lib/domain/lid.ml`. Для адаптации под другой стек (например, backend на Go):
+You can change kind and relation types for any stack. Full instructions: **[docs/customization-guide.md](docs/customization-guide.md)**, full example for Go backend: **[docs/example-go-rest-api.md](docs/example-go-rest-api.md)**.
 
-1. Замените kind-варианты на свои: `Handler`, `Repository`, `Service`, `Model`, etc.
-2. Обновите `prefix_of_kind` и `kind_of_prefix`
-3. AI-агент будет ориентироваться на эти типы при анализе кода
-
-## Сборка и тесты
+## Build and Test
 
 ```bash
-# Сборка
+# Build
 dune build
 
-# Тесты
+# Tests
 dune runtest
 
-# Запуск
+# Run
 dune exec aimemory -- status
 ```
 
-## Лицензия
+## License
 
 MIT
