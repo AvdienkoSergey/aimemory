@@ -354,9 +354,8 @@ let tool_schemas () : t =
                         ]);
                         ("rel", `Assoc [
                           ("type", `String "string");
-                          ("enum", `List (List.map (fun s -> `String s)
-                            ["belongs_to"; "calls"; "depends_on";
-                             "contains"; "implements"; "references"]));
+                          ("enum", `List (List.map (fun r ->
+                              `String (Ref.rel_to_string r)) Ref.all_rels));
                           ("description", `String
                              "belongs_to: parent-child (fn in composable). \
                               calls: function invocation. \
