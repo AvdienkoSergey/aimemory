@@ -5,6 +5,7 @@ type rel =
   | Depends_on   (** Button depends_on lodash — import/require *)
   | Contains     (** file contains function — structural nesting *)
   | Implements   (** validate implements Validator — type conformance *)
+  | Renders      (** ParentComp renders ChildComp — template usage *)
   | References   (** generic link when nothing else fits *)
 
 type pending = {
@@ -34,9 +35,10 @@ let rel_to_string = function
   | Depends_on -> "depends_on"
   | Contains -> "contains"
   | Implements -> "implements"
+  | Renders -> "renders"
   | References -> "references"
 
-let all_rels = [Belongs_to; Calls; Depends_on; Contains; Implements; References]
+let all_rels = [Belongs_to; Calls; Depends_on; Contains; Implements; Renders; References]
 
 (* Derived from rel_to_string + all_rels — no manual maintenance *)
 let rel_of_string s =

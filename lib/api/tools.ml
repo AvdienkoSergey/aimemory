@@ -433,7 +433,7 @@ let tool_schemas () : t =
               ("type", `String "string");
               ("enum", `List (List.map (fun s -> `String s)
                 ["belongs_to"; "calls"; "depends_on";
-                 "contains"; "implements"; "references"]));
+                 "contains"; "implements"; "renders"; "references"]));
               ("description", `String
                  "Filter by rel. calls: who calls what. depends_on: imports. \
                   contains: nesting. belongs_to: parent. implements: types.");
