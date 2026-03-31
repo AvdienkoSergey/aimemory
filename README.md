@@ -1,6 +1,11 @@
 # aimemory
 
+[![CI](https://github.com/AvdienkoSergey/aimemory/actions/workflows/ci.yml/badge.svg)](https://github.com/AvdienkoSergey/aimemory/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Context memory for AI agents. SQLite storage for entities and relations between them. It works with any domain — you can change the vocabulary to fit your project.
+
+![aimemory logo](./docs/aimemory.png)
 
 ## Why
 
