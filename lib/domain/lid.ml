@@ -101,37 +101,9 @@ let all_kinds =
     Provide;
   ]
 
-let kind_of_prefix = function
-  | "comp" -> Some Comp
-  | "view" -> Some View
-  | "layout" -> Some Layout
-  | "store" -> Some Store
-  | "service" -> Some Service
-  | "composable" -> Some Composable
-  | "intercept" -> Some Intercept
-  | "validator" -> Some Validator
-  | "util" -> Some Util
-  | "plugin" -> Some Plugin
-  | "provider" -> Some Provider
-  | "route" -> Some Route
-  | "locale" -> Some Locale
-  | "const" -> Some Const
-  | "style" -> Some Style
-  | "unit" -> Some Unit
-  | "e2e" -> Some E2e
-  | "asset" -> Some Asset
-  | "api" -> Some Api
-  | "dep" -> Some Dep
-  | "fn" -> Some Fn
-  | "state" -> Some State
-  | "computed" -> Some Computed
-  | "action" -> Some Action
-  | "prop" -> Some Prop
-  | "emit" -> Some Emit
-  | "hook" -> Some Hook
-  | "type" -> Some Typ
-  | "provide" -> Some Provide
-  | _ -> None
+(* Derived from prefix_of_kind + all_kinds — no manual maintenance *)
+let kind_of_prefix s =
+  List.find_opt (fun k -> prefix_of_kind k = s) all_kinds
 
 let of_string s =
   if String.length s = 0 then Error Empty

@@ -36,11 +36,8 @@ let rel_to_string = function
   | Implements -> "implements"
   | References -> "references"
 
-let rel_of_string = function
-  | "belongs_to" -> Some Belongs_to
-  | "calls" -> Some Calls
-  | "depends_on" -> Some Depends_on
-  | "contains" -> Some Contains
-  | "implements" -> Some Implements
-  | "references" -> Some References
-  | _ -> None
+let all_rels = [Belongs_to; Calls; Depends_on; Contains; Implements; References]
+
+(* Derived from rel_to_string + all_rels — no manual maintenance *)
+let rel_of_string s =
+  List.find_opt (fun r -> rel_to_string r = s) all_rels
