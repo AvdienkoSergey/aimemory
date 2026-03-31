@@ -1,136 +1,96 @@
-# Contributing
+# Contributing to aimemory
 
-## How to Create an Issue
+Thank you for your interest in the project! This document describes the development process and rules for making changes.
 
-### Bug Report with Logs
+## Branching Strategy
 
-1. Run the command with `--verbose` flag:
-```bash
-aimemory --verbose call emit '{"entities":[...]}'
+The project uses **GitHub Flow**:
+
+1. `main` — stable branch, always in working state
+2. For each task, create a **feature branch** from `main`
+3. Changes go through a **Pull Request** with required code review
+4. After PR is approved, it is merged to `main` with squash merge
+
+### Branch naming
+
+```
+feat/short-description       — new feature
+fix/short-description        — bug fix
+docs/short-description       — documentation changes
+refactor/short-description   — refactoring without behavior change
+test/short-description       — adding or changing tests
 ```
 
-2. Find the log file (it is next to database):
-```bash
-# If database is context.db, logs are in context.log
-cat context.log
+## Commit Convention
+
+The project uses [Conventional Commits](https://www.conventionalcommits.org/) to automatically create CHANGELOG and manage versions:
+
+```
+feat: add new entity kind for function signatures
+fix: resolve UNIQUE constraint error on duplicate emit
+docs: update CLI usage examples
+test: add property-based tests for Lid parsing
+refactor: simplify Resolver graph traversal
+chore: update dependencies
 ```
 
-3. Create an issue with:
-   - **Title:** short description of the problem
-   - **Steps:** what commands you ran
-   - **Expected:** what should happen
-   - **Actual:** what happened
-   - **Logs:** copy from `.log` file
+## Development Workflow
 
-**Example issue:**
+### Setting up the environment
 
-```markdown
-### Steps
-aimemory --verbose call emit '{"entities":[{"lid":"fn:test","data":{}}]}'
-
-### Expected
-Entity is saved without errors
-
-### Actual
-Error "Storage_error: UNIQUE constraint failed"
-
-### Logs
-2024-01-15 10:23:45 [DEBUG] processing command: emit (1 entities)
-2024-01-15 10:23:45 [WARN] command emit failed: storage error: UNIQUE constraint failed
-```
-
-### Feature Request
-
-- Describe why you need this feature
-- Give an example (CLI command, JSON format)
-- Tell us what new kind or rel types you need
-
-## How to Create a Pull Request
-
-### Before You Start
-
-1. Make sure the project builds and tests pass:
 ```bash
+git clone https://github.com/AvdienkoSergey/aimemory.git
+cd aimemory
+opam install . --deps-only --with-test
 dune build
-dune runtest
 ```
 
-### Steps
+### Before sending a PR
 
-1. Create a new branch from `main`:
 ```bash
-git checkout -b feature/my-feature
+dune build                                          # compiles without errors
+opam lint aimemory.opam                             # opam file is valid
+dune build @fmt                                     # formatting is correct
+dune runtest                                        # all tests pass
+dune runtest --instrument-with bisect_ppx           # coverage check
 ```
 
-2. Make your changes. Keep the code simple:
-   - Simple code is better than "clever" code
-   - Do not add extra abstractions
-   - Code should be easy to read
+### Auto-fix formatting
 
-3. Check that everything works:
 ```bash
-dune build
-dune runtest
+dune fmt
 ```
 
-4. Create a commit with a clear message:
-```bash
-git add .
-git commit -m "feat: add X for Y"
-```
+## Code Review
 
-5. Push your branch and create a PR:
-```bash
-git push -u origin feature/my-feature
-gh pr create --title "feat: add X" --body "..."
-```
+- Each PR needs at least one approve from a code owner
+- CI must be green before merge
+- Reviewer checks: correctness, tests, documentation, code style
+- PR author must resolve all comments
 
-### PR Format
+## Code Style
 
-```markdown
-## What I did
-- Short list of changes
+- Formatting with `ocamlformat` (config in `.ocamlformat`)
+- Run `dune build @fmt` to check, `dune fmt` to auto-fix
+- Keep modules small and focused
+- Prefer simple code over clever abstractions
 
-## Why
-- What problem this solves
+## Testing
 
-## How to test
-- Commands to check it works
-```
+- Unit tests for each module (`test/test_*.ml`)
+- Property-based tests with `qcheck` for edge cases (`test/test_prop.ml`)
+- Code coverage is checked in CI with `bisect_ppx`
 
-### Checklist Before PR
+## Reporting Issues
 
-- [ ] `dune build` works without errors
-- [ ] `dune runtest` — all tests pass
-- [ ] I added tests for new code (if needed)
-- [ ] I updated README if public API changed
+- Use Issue templates on GitHub
+- **Bug Report** — for bugs
+- **Feature Request** — for ideas
 
-## Project Structure
+## Releases
 
-```
-lib/
-  domain/    — types: Lid, Entity, Ref, Protocol
-  storage/   — SQLite: Repo, Schema
-  engine/    — logic: Ingest, Resolver
-  api/       — JSON API: Tools
-  support/   — helpers: Log
-bin/
-  main.ml    — CLI
-test/
-  test_*.ml  — tests
-```
+Releases are managed automatically with [release-please](https://github.com/googleapis/release-please). When you merge to `main`, a PR with version update and CHANGELOG is created.
 
-## How to Add a New Kind
+## Code of Conduct
 
-1. Add a new variant in `lib/domain/lid.ml`:
-```ocaml
-type kind =
-  | ...
-  | MyNewKind  (* new kind *)
-```
-
-2. Update `prefix_of_kind` and `kind_of_prefix`
-
-3. Add it to `all_kinds` list
-
-4. The compiler will show you all places where you need to handle the new kind
+Please read and follow the [Code of Conduct](CODE_OF_CONDUCT.md).
