@@ -100,6 +100,7 @@ let open_db path =
   try
     let db = Sqlite3.db_open path in
     ignore (Sqlite3.exec db "PRAGMA journal_mode=WAL;");
+    ignore (Sqlite3.exec db "PRAGMA busy_timeout=5000;");
     ignore (Sqlite3.exec db "PRAGMA foreign_keys=ON;");
     match run_migrations db with
     | Ok () ->
