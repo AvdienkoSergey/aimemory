@@ -12,35 +12,36 @@ let lid_of_string s =
 
 let make_input lid_str ?(data = []) ?(refs = []) () =
   let lid = lid_of_string lid_str in
-  let ref_inputs = List.map (fun (tgt, rel) ->
-    Protocol.{ target = lid_of_string tgt; rel }
-  ) refs in
+  let ref_inputs =
+    List.map
+      (fun (tgt, rel) -> Protocol.{ target = lid_of_string tgt; rel })
+      refs
+  in
   Protocol.{ lid; data; refs = ref_inputs }
 
 let emit_result_of_response = function
   | Protocol.Emit_result r -> r
-  | Protocol.Error e ->
-    (match e with
-     | Protocol.Storage_error s -> assert_failure ("Storage error: " ^ s)
-     | _ -> assert_failure "Unexpected protocol error")
+  | Protocol.Error e -> (
+      match e with
+      | Protocol.Storage_error s -> assert_failure ("Storage error: " ^ s)
+      | _ -> assert_failure "Unexpected protocol error")
   | _ -> assert_failure "Expected Emit_result"
 
 let entities_of_response = function
   | Protocol.Entities r -> r.items
-  | Protocol.Error e ->
-    (match e with
-     | Protocol.Storage_error s -> assert_failure ("Storage error: " ^ s)
-     | _ -> assert_failure "Unexpected protocol error")
+  | Protocol.Error e -> (
+      match e with
+      | Protocol.Storage_error s -> assert_failure ("Storage error: " ^ s)
+      | _ -> assert_failure "Unexpected protocol error")
   | _ -> assert_failure "Expected Entities"
 
 let refs_of_response = function
   | Protocol.Refs r -> r.items
-  | Protocol.Error e ->
-    (match e with
-     | Protocol.Storage_error s -> assert_failure ("Storage error: " ^ s)
-     | _ -> assert_failure "Unexpected protocol error")
+  | Protocol.Error e -> (
+      match e with
+      | Protocol.Storage_error s -> assert_failure ("Storage error: " ^ s)
+      | _ -> assert_failure "Unexpected protocol error")
   | _ -> assert_failure "Expected Refs"
-
 
 (* ------------------------------------------------------------------ *)
 (*  Ingest: emit_one                                                   *)
@@ -49,7 +50,7 @@ let refs_of_response = function
 let test_emit_one_simple _ctx =
   let db = open_mem _ctx in
   let lid = lid_of_string "fn:hello" in
-  let resp = Ingest.emit_one db ~lid ~data:[("msg", Entity.String "hi")] in
+  let resp = Ingest.emit_one db ~lid ~data:[ ("msg", Entity.String "hi") ] in
   let result = emit_result_of_response resp in
   assert_equal 1 (List.length result.upserted);
   assert_equal lid (List.hd result.upserted);
@@ -58,14 +59,13 @@ let test_emit_one_simple _ctx =
 let test_emit_one_updates _ctx =
   let db = open_mem _ctx in
   let lid = lid_of_string "fn:counter" in
-  let _ = Ingest.emit_one db ~lid ~data:[("v", Entity.Int 1)] in
-  let _ = Ingest.emit_one db ~lid ~data:[("v", Entity.Int 2)] in
+  let _ = Ingest.emit_one db ~lid ~data:[ ("v", Entity.Int 1) ] in
+  let _ = Ingest.emit_one db ~lid ~data:[ ("v", Entity.Int 2) ] in
   let resp = Ingest.query_by_kind db Lid.Fn in
   let entities = entities_of_response resp in
   assert_equal 1 (List.length entities);
-  assert_equal [("v", Entity.Int 2)] (List.hd entities).Entity.data;
+  assert_equal [ ("v", Entity.Int 2) ] (List.hd entities).Entity.data;
   Repo.close db
-
 
 (* ------------------------------------------------------------------ *)
 (*  Ingest: emit_with_refs                                             *)
@@ -74,7 +74,7 @@ let test_emit_one_updates _ctx =
 let test_emit_with_refs_pending _ctx =
   let db = open_mem _ctx in
   let lid = lid_of_string "fn:caller" in
-  let refs = [(lid_of_string "fn:callee", Ref.Calls)] in
+  let refs = [ (lid_of_string "fn:callee", Ref.Calls) ] in
   let resp = Ingest.emit_with_refs db ~lid ~data:[] ~refs in
   let result = emit_result_of_response resp in
   assert_equal 1 (List.length result.upserted);
@@ -87,13 +87,12 @@ let test_emit_with_refs_resolved _ctx =
   let callee_lid = lid_of_string "fn:callee" in
   let _ = Ingest.emit_one db ~lid:callee_lid ~data:[] in
   let caller_lid = lid_of_string "fn:caller" in
-  let refs = [(callee_lid, Ref.Calls)] in
+  let refs = [ (callee_lid, Ref.Calls) ] in
   let resp = Ingest.emit_with_refs db ~lid:caller_lid ~data:[] ~refs in
   let result = emit_result_of_response resp in
   assert_equal 1 (List.length result.refs_resolved);
   assert_equal 0 (List.length result.refs_pending);
   Repo.close db
-
 
 (* ------------------------------------------------------------------ *)
 (*  Ingest: batch emit via process                                     *)
@@ -101,18 +100,21 @@ let test_emit_with_refs_resolved _ctx =
 
 let test_process_emit_batch _ctx =
   let db = open_mem _ctx in
-  let inputs = [
-    make_input "fn:a" ~data:[("x", Entity.Int 1)] ();
-    make_input "fn:b" ~data:[("y", Entity.Int 2)]
-      ~refs:[("fn:a", Ref.Calls)] ();
-  ] in
+  let inputs =
+    [
+      make_input "fn:a" ~data:[ ("x", Entity.Int 1) ] ();
+      make_input "fn:b"
+        ~data:[ ("y", Entity.Int 2) ]
+        ~refs:[ ("fn:a", Ref.Calls) ]
+        ();
+    ]
+  in
   let cmd = Protocol.Emit { entities = inputs } in
   let resp = Ingest.process db cmd in
   let result = emit_result_of_response resp in
   assert_equal 2 (List.length result.upserted);
   assert_equal 1 (List.length result.refs_resolved);
   Repo.close db
-
 
 (* ------------------------------------------------------------------ *)
 (*  Ingest: query commands                                             *)
@@ -146,8 +148,10 @@ let test_outgoing_refs _ctx =
   let _ = Ingest.emit_one db ~lid:lid_a ~data:[] in
   let _ = Ingest.emit_one db ~lid:lid_b ~data:[] in
   let _ = Ingest.emit_one db ~lid:lid_c ~data:[] in
-  let _ = Ingest.emit_with_refs db ~lid:lid_a ~data:[]
-      ~refs:[(lid_b, Ref.Calls); (lid_c, Ref.References)] in
+  let _ =
+    Ingest.emit_with_refs db ~lid:lid_a ~data:[]
+      ~refs:[ (lid_b, Ref.Calls); (lid_c, Ref.References) ]
+  in
   let resp = Ingest.outgoing_refs db lid_a in
   let refs = refs_of_response resp in
   assert_equal 2 (List.length refs);
@@ -157,17 +161,18 @@ let test_incoming_refs _ctx =
   let db = open_mem _ctx in
   let target = lid_of_string "fn:target" in
   let _ = Ingest.emit_one db ~lid:target ~data:[] in
-  let _ = Ingest.emit_with_refs db
-      ~lid:(lid_of_string "fn:src1") ~data:[]
-      ~refs:[(target, Ref.Calls)] in
-  let _ = Ingest.emit_with_refs db
-      ~lid:(lid_of_string "fn:src2") ~data:[]
-      ~refs:[(target, Ref.References)] in
+  let _ =
+    Ingest.emit_with_refs db ~lid:(lid_of_string "fn:src1") ~data:[]
+      ~refs:[ (target, Ref.Calls) ]
+  in
+  let _ =
+    Ingest.emit_with_refs db ~lid:(lid_of_string "fn:src2") ~data:[]
+      ~refs:[ (target, Ref.References) ]
+  in
   let resp = Ingest.incoming_refs db target in
   let refs = refs_of_response resp in
   assert_equal 2 (List.length refs);
   Repo.close db
-
 
 (* ------------------------------------------------------------------ *)
 (*  Ingest: batch processing                                           *)
@@ -176,15 +181,24 @@ let test_incoming_refs _ctx =
 let test_process_batch_stops_on_error _ctx =
   let db = open_mem _ctx in
   let _ = Ingest.emit_one db ~lid:(lid_of_string "fn:a") ~data:[] in
-  let _ = Ingest.emit_with_refs db
-      ~lid:(lid_of_string "fn:b") ~data:[]
-      ~refs:[(lid_of_string "fn:missing", Ref.Calls)] in
-  let cmds = [
-    Protocol.Query_refs { source = None; target = None; rel_type = None;
-                          limit = None; offset = None };
-    Protocol.Query_entities { kind = None; pattern = None;
-                              limit = None; offset = None };
-  ] in
+  let _ =
+    Ingest.emit_with_refs db ~lid:(lid_of_string "fn:b") ~data:[]
+      ~refs:[ (lid_of_string "fn:missing", Ref.Calls) ]
+  in
+  let cmds =
+    [
+      Protocol.Query_refs
+        {
+          source = None;
+          target = None;
+          rel_type = None;
+          limit = None;
+          offset = None;
+        };
+      Protocol.Query_entities
+        { kind = None; pattern = None; limit = None; offset = None };
+    ]
+  in
   let responses = Ingest.process_batch db cmds in
   assert_equal 2 (List.length responses);
   Repo.close db
@@ -192,15 +206,16 @@ let test_process_batch_stops_on_error _ctx =
 let test_process_all_collects_all _ctx =
   let db = open_mem _ctx in
   let _ = Ingest.emit_one db ~lid:(lid_of_string "fn:x") ~data:[] in
-  let cmds = [
-    Protocol.Emit { entities = [make_input "fn:y" ()] };
-    Protocol.Query_entities { kind = Some Lid.Fn; pattern = None;
-                              limit = None; offset = None };
-  ] in
+  let cmds =
+    [
+      Protocol.Emit { entities = [ make_input "fn:y" () ] };
+      Protocol.Query_entities
+        { kind = Some Lid.Fn; pattern = None; limit = None; offset = None };
+    ]
+  in
   let responses = Ingest.process_all db cmds in
   assert_equal 2 (List.length responses);
   Repo.close db
-
 
 (* ------------------------------------------------------------------ *)
 (*  Ingest: status and diagnostics                                     *)
@@ -210,33 +225,33 @@ let test_status_empty _ctx =
   let db = open_mem _ctx in
   match Ingest.status db with
   | Ok s ->
-    assert_equal 0 s.Ingest.stats.entity_count;
-    assert_equal 0 s.Ingest.stats.ref_resolved_count;
-    assert_equal 0 s.Ingest.stats.ref_pending_count;
-    Repo.close db
+      assert_equal 0 s.Ingest.stats.entity_count;
+      assert_equal 0 s.Ingest.stats.ref_resolved_count;
+      assert_equal 0 s.Ingest.stats.ref_pending_count;
+      Repo.close db
   | Error e ->
-    Repo.close db;
-    assert_failure (Repo.pp_error e)
+      Repo.close db;
+      assert_failure (Repo.pp_error e)
 
 let test_status_after_ops _ctx =
   let db = open_mem _ctx in
   let lid_a = lid_of_string "fn:a" in
   let lid_missing = lid_of_string "fn:missing" in
   let _ = Ingest.emit_one db ~lid:lid_a ~data:[] in
-  let _ = Ingest.emit_with_refs db
-      ~lid:(lid_of_string "fn:b") ~data:[]
-      ~refs:[(lid_a, Ref.Calls); (lid_missing, Ref.References)] in
+  let _ =
+    Ingest.emit_with_refs db ~lid:(lid_of_string "fn:b") ~data:[]
+      ~refs:[ (lid_a, Ref.Calls); (lid_missing, Ref.References) ]
+  in
   match Ingest.status db with
   | Ok s ->
-    assert_equal 2 s.Ingest.stats.entity_count;
-    assert_equal 1 s.Ingest.stats.ref_resolved_count;
-    assert_equal 1 s.Ingest.stats.ref_pending_count;
-    assert_equal 1 s.Ingest.missing.total_pending;
-    Repo.close db
+      assert_equal 2 s.Ingest.stats.entity_count;
+      assert_equal 1 s.Ingest.stats.ref_resolved_count;
+      assert_equal 1 s.Ingest.stats.ref_pending_count;
+      assert_equal 1 s.Ingest.missing.total_pending;
+      Repo.close db
   | Error e ->
-    Repo.close db;
-    assert_failure (Repo.pp_error e)
-
+      Repo.close db;
+      assert_failure (Repo.pp_error e)
 
 (* ------------------------------------------------------------------ *)
 (*  Resolver: resolve_pending                                          *)
@@ -248,34 +263,34 @@ let test_resolve_pending_all_exist _ctx =
   let lid_b = lid_of_string "fn:b" in
   let _ = Ingest.emit_one db ~lid:lid_a ~data:[] in
   let _ = Ingest.emit_one db ~lid:lid_b ~data:[] in
-  let pending = [Ref.{ source = lid_a; target = lid_b; rel = Ref.Calls }] in
+  let pending = [ Ref.{ source = lid_a; target = lid_b; rel = Ref.Calls } ] in
   match Resolver.resolve_pending db pending with
   | Ok result ->
-    assert_equal 1 (List.length result.resolved);
-    assert_equal 0 (List.length result.pending);
-    Repo.close db
+      assert_equal 1 (List.length result.resolved);
+      assert_equal 0 (List.length result.pending);
+      Repo.close db
   | Error e ->
-    Repo.close db;
-    assert_failure (Repo.pp_error e)
+      Repo.close db;
+      assert_failure (Repo.pp_error e)
 
 let test_resolve_pending_target_missing _ctx =
   let db = open_mem _ctx in
   let lid_a = lid_of_string "fn:a" in
   let _ = Ingest.emit_one db ~lid:lid_a ~data:[] in
-  let pending = [Ref.{
-    source = lid_a;
-    target = lid_of_string "fn:missing";
-    rel = Ref.Calls
-  }] in
+  let pending =
+    [
+      Ref.
+        { source = lid_a; target = lid_of_string "fn:missing"; rel = Ref.Calls };
+    ]
+  in
   match Resolver.resolve_pending db pending with
   | Ok result ->
-    assert_equal 0 (List.length result.resolved);
-    assert_equal 1 (List.length result.pending);
-    Repo.close db
+      assert_equal 0 (List.length result.resolved);
+      assert_equal 1 (List.length result.pending);
+      Repo.close db
   | Error e ->
-    Repo.close db;
-    assert_failure (Repo.pp_error e)
-
+      Repo.close db;
+      assert_failure (Repo.pp_error e)
 
 (* ------------------------------------------------------------------ *)
 (*  Pagination via process                                             *)
@@ -284,31 +299,45 @@ let test_resolve_pending_target_missing _ctx =
 let test_query_entities_pagination _ctx =
   let db = open_mem _ctx in
   for i = 1 to 5 do
-    let _ = Ingest.emit_one db ~lid:(lid_of_string (Printf.sprintf "fn:e%d" i)) ~data:[] in ()
+    let _ =
+      Ingest.emit_one db
+        ~lid:(lid_of_string (Printf.sprintf "fn:e%d" i))
+        ~data:[]
+    in
+    ()
   done;
-  let cmd = Protocol.Query_entities { kind = Some Lid.Fn; pattern = None;
-                                      limit = Some 2; offset = Some 0 } in
+  let cmd =
+    Protocol.Query_entities
+      { kind = Some Lid.Fn; pattern = None; limit = Some 2; offset = Some 0 }
+  in
   match Ingest.process db cmd with
   | Protocol.Entities r ->
-    assert_equal 2 (List.length r.items);
-    assert_equal 5 r.page.total;
-    assert_equal true r.page.has_more;
-    Repo.close db
+      assert_equal 2 (List.length r.items);
+      assert_equal 5 r.page.total;
+      assert_equal true r.page.has_more;
+      Repo.close db
   | _ -> assert_failure "Expected Entities"
 
 let test_query_entities_last_page _ctx =
   let db = open_mem _ctx in
   for i = 1 to 3 do
-    let _ = Ingest.emit_one db ~lid:(lid_of_string (Printf.sprintf "fn:e%d" i)) ~data:[] in ()
+    let _ =
+      Ingest.emit_one db
+        ~lid:(lid_of_string (Printf.sprintf "fn:e%d" i))
+        ~data:[]
+    in
+    ()
   done;
-  let cmd = Protocol.Query_entities { kind = Some Lid.Fn; pattern = None;
-                                      limit = Some 2; offset = Some 2 } in
+  let cmd =
+    Protocol.Query_entities
+      { kind = Some Lid.Fn; pattern = None; limit = Some 2; offset = Some 2 }
+  in
   match Ingest.process db cmd with
   | Protocol.Entities r ->
-    assert_equal 1 (List.length r.items);
-    assert_equal 3 r.page.total;
-    assert_equal false r.page.has_more;
-    Repo.close db
+      assert_equal 1 (List.length r.items);
+      assert_equal 3 r.page.total;
+      assert_equal false r.page.has_more;
+      Repo.close db
   | _ -> assert_failure "Expected Entities"
 
 let test_query_refs_pagination _ctx =
@@ -317,18 +346,28 @@ let test_query_refs_pagination _ctx =
   let _ = Ingest.emit_one db ~lid:lid_t ~data:[] in
   for i = 1 to 4 do
     let src = lid_of_string (Printf.sprintf "fn:src%d" i) in
-    let _ = Ingest.emit_with_refs db ~lid:src ~data:[] ~refs:[(lid_t, Ref.Calls)] in ()
+    let _ =
+      Ingest.emit_with_refs db ~lid:src ~data:[] ~refs:[ (lid_t, Ref.Calls) ]
+    in
+    ()
   done;
-  let cmd = Protocol.Query_refs { source = None; target = Some lid_t; rel_type = None;
-                                  limit = Some 2; offset = Some 0 } in
+  let cmd =
+    Protocol.Query_refs
+      {
+        source = None;
+        target = Some lid_t;
+        rel_type = None;
+        limit = Some 2;
+        offset = Some 0;
+      }
+  in
   match Ingest.process db cmd with
   | Protocol.Refs r ->
-    assert_equal 2 (List.length r.items);
-    assert_equal 4 r.page.total;
-    assert_equal true r.page.has_more;
-    Repo.close db
+      assert_equal 2 (List.length r.items);
+      assert_equal 4 r.page.total;
+      assert_equal true r.page.has_more;
+      Repo.close db
   | _ -> assert_failure "Expected Refs"
-
 
 (* ------------------------------------------------------------------ *)
 (*  Resolver: analyze_pending                                          *)
@@ -338,61 +377,64 @@ let test_analyze_pending_empty _ctx =
   let db = open_mem _ctx in
   match Resolver.analyze_pending db with
   | Ok analysis ->
-    assert_equal 0 analysis.total_pending;
-    assert_equal 0 (List.length analysis.missing_lids);
-    Repo.close db
+      assert_equal 0 analysis.total_pending;
+      assert_equal 0 (List.length analysis.missing_lids);
+      Repo.close db
   | Error e ->
-    Repo.close db;
-    assert_failure (Repo.pp_error e)
+      Repo.close db;
+      assert_failure (Repo.pp_error e)
 
 let test_analyze_pending_missing _ctx =
   let db = open_mem _ctx in
   let missing1 = lid_of_string "fn:missing1" in
   let missing2 = lid_of_string "fn:missing2" in
-  let _ = Ingest.emit_with_refs db
-      ~lid:(lid_of_string "fn:a") ~data:[]
-      ~refs:[(missing1, Ref.Calls); (missing2, Ref.References)] in
-  let _ = Ingest.emit_with_refs db
-      ~lid:(lid_of_string "fn:b") ~data:[]
-      ~refs:[(missing1, Ref.Calls)] in
+  let _ =
+    Ingest.emit_with_refs db ~lid:(lid_of_string "fn:a") ~data:[]
+      ~refs:[ (missing1, Ref.Calls); (missing2, Ref.References) ]
+  in
+  let _ =
+    Ingest.emit_with_refs db ~lid:(lid_of_string "fn:b") ~data:[]
+      ~refs:[ (missing1, Ref.Calls) ]
+  in
   match Resolver.analyze_pending db with
   | Ok analysis ->
-    assert_equal 3 analysis.total_pending;
-    assert_equal 2 (List.length analysis.missing_lids);
-    let missing1_count = List.assoc_opt missing1 analysis.missing_lids in
-    assert_equal (Some 2) missing1_count;
-    Repo.close db
+      assert_equal 3 analysis.total_pending;
+      assert_equal 2 (List.length analysis.missing_lids);
+      let missing1_count = List.assoc_opt missing1 analysis.missing_lids in
+      assert_equal (Some 2) missing1_count;
+      Repo.close db
   | Error e ->
-    Repo.close db;
-    assert_failure (Repo.pp_error e)
-
+      Repo.close db;
+      assert_failure (Repo.pp_error e)
 
 (* ------------------------------------------------------------------ *)
 (*  Suite                                                              *)
 (* ------------------------------------------------------------------ *)
 
 let suite =
-  "engine" >::: [
-    "emit_one_simple" >:: test_emit_one_simple;
-    "emit_one_updates" >:: test_emit_one_updates;
-    "emit_with_refs_pending" >:: test_emit_with_refs_pending;
-    "emit_with_refs_resolved" >:: test_emit_with_refs_resolved;
-    "process_emit_batch" >:: test_process_emit_batch;
-    "query_entities_by_kind" >:: test_query_entities_by_kind;
-    "query_entities_by_pattern" >:: test_query_entities_by_pattern;
-    "outgoing_refs" >:: test_outgoing_refs;
-    "incoming_refs" >:: test_incoming_refs;
-    "process_batch_stops" >:: test_process_batch_stops_on_error;
-    "process_all_collects" >:: test_process_all_collects_all;
-    "status_empty" >:: test_status_empty;
-    "status_after_ops" >:: test_status_after_ops;
-    "resolve_pending_all_exist" >:: test_resolve_pending_all_exist;
-    "resolve_pending_target_missing" >:: test_resolve_pending_target_missing;
-    "analyze_pending_empty" >:: test_analyze_pending_empty;
-    "analyze_pending_missing" >:: test_analyze_pending_missing;
-    "query_entities_pagination" >:: test_query_entities_pagination;
-    "query_entities_last_page" >:: test_query_entities_last_page;
-    "query_refs_pagination" >:: test_query_refs_pagination;
-  ]
+  "engine"
+  >::: [
+         "emit_one_simple" >:: test_emit_one_simple;
+         "emit_one_updates" >:: test_emit_one_updates;
+         "emit_with_refs_pending" >:: test_emit_with_refs_pending;
+         "emit_with_refs_resolved" >:: test_emit_with_refs_resolved;
+         "process_emit_batch" >:: test_process_emit_batch;
+         "query_entities_by_kind" >:: test_query_entities_by_kind;
+         "query_entities_by_pattern" >:: test_query_entities_by_pattern;
+         "outgoing_refs" >:: test_outgoing_refs;
+         "incoming_refs" >:: test_incoming_refs;
+         "process_batch_stops" >:: test_process_batch_stops_on_error;
+         "process_all_collects" >:: test_process_all_collects_all;
+         "status_empty" >:: test_status_empty;
+         "status_after_ops" >:: test_status_after_ops;
+         "resolve_pending_all_exist" >:: test_resolve_pending_all_exist;
+         "resolve_pending_target_missing"
+         >:: test_resolve_pending_target_missing;
+         "analyze_pending_empty" >:: test_analyze_pending_empty;
+         "analyze_pending_missing" >:: test_analyze_pending_missing;
+         "query_entities_pagination" >:: test_query_entities_pagination;
+         "query_entities_last_page" >:: test_query_entities_last_page;
+         "query_refs_pagination" >:: test_query_refs_pagination;
+       ]
 
 let () = run_test_tt_main suite

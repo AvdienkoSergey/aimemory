@@ -1,5 +1,5 @@
-(** Unit tests for domain layer types: Lid, Entity, Ref, Protocol.
-    Uses real modules from the domain library — no stubs. *)
+(** Unit tests for domain layer types: Lid, Entity, Ref, Protocol. Uses real
+    modules from the domain library — no stubs. *)
 
 open OUnit2
 
@@ -33,8 +33,7 @@ let test_lid_parse_path_with_slashes _ =
 
 (* ── 2. Lid.of_string — errors ── *)
 
-let test_lid_parse_empty _ =
-  assert_equal (Error Lid.Empty) (Lid.of_string "")
+let test_lid_parse_empty _ = assert_equal (Error Lid.Empty) (Lid.of_string "")
 
 let test_lid_parse_missing_colon _ =
   assert_equal (Error Lid.Missing_colon) (Lid.of_string "compButton")
@@ -120,7 +119,8 @@ let test_entity_raw _ =
 let test_entity_processed_has_id _ =
   let lid = Lid.make Lid.Store ~path:"cart" in
   let processed =
-    Entity.{ id = 7; lid; data = []; created = 1_000_000.0; updated = 1_000_001.0 }
+    Entity.
+      { id = 7; lid; data = []; created = 1_000_000.0; updated = 1_000_001.0 }
   in
   assert_equal 7 processed.id;
   assert_bool "created <= updated" (processed.created <= processed.updated)
@@ -138,13 +138,16 @@ let test_ref_pending_construction _ =
 let test_ref_resolved_construction _ =
   let src = Lid.make Lid.Fn ~path:"caller" in
   let tgt = Lid.make Lid.Fn ~path:"callee" in
-  let resolved = Ref.{
-    source = src;
-    target = tgt;
-    rel = Ref.Calls;
-    source_id = 1;
-    target_id = 2;
-  } in
+  let resolved =
+    Ref.
+      {
+        source = src;
+        target = tgt;
+        rel = Ref.Calls;
+        source_id = 1;
+        target_id = 2;
+      }
+  in
   assert_equal 1 resolved.source_id;
   assert_equal 2 resolved.target_id
 
@@ -159,13 +162,22 @@ let test_ref_rel_of_string _ =
   assert_equal None (Ref.rel_of_string "unknown")
 
 let test_ref_rel_roundtrip _ =
-  let rels = [Ref.Belongs_to; Ref.Calls; Ref.Depends_on;
-              Ref.Contains; Ref.Implements; Ref.References] in
-  List.iter (fun rel ->
-    let s = Ref.rel_to_string rel in
-    assert_equal (Some rel) (Ref.rel_of_string s)
-      ~msg:("Roundtrip failed for: " ^ s)
-  ) rels
+  let rels =
+    [
+      Ref.Belongs_to;
+      Ref.Calls;
+      Ref.Depends_on;
+      Ref.Contains;
+      Ref.Implements;
+      Ref.References;
+    ]
+  in
+  List.iter
+    (fun rel ->
+      let s = Ref.rel_to_string rel in
+      assert_equal (Some rel) (Ref.rel_of_string s)
+        ~msg:("Roundtrip failed for: " ^ s))
+    rels
 
 (* ── 8. Protocol ── *)
 
@@ -193,8 +205,10 @@ let test_protocol_emit_with_refs _ =
   | _ -> assert_failure "Expected Emit"
 
 let test_protocol_query_entities_with_kind _ =
-  let q = Protocol.{ kind = Some Lid.Store; pattern = None;
-                     limit = None; offset = None } in
+  let q =
+    Protocol.
+      { kind = Some Lid.Store; pattern = None; limit = None; offset = None }
+  in
   let cmd = Protocol.Query_entities q in
   match cmd with
   | Protocol.Query_entities q -> assert_equal (Some Lid.Store) q.Protocol.kind
@@ -202,8 +216,16 @@ let test_protocol_query_entities_with_kind _ =
 
 let test_protocol_query_refs _ =
   let src = Lid.make Lid.Fn ~path:"login" in
-  let q = Protocol.{ source = Some src; target = None; rel_type = Some Ref.Calls;
-                     limit = None; offset = None } in
+  let q =
+    Protocol.
+      {
+        source = Some src;
+        target = None;
+        rel_type = Some Ref.Calls;
+        limit = None;
+        offset = None;
+      }
+  in
   let cmd = Protocol.Query_refs q in
   match cmd with
   | Protocol.Query_refs q ->
@@ -213,7 +235,9 @@ let test_protocol_query_refs _ =
 
 let test_protocol_emit_result _ =
   let lid = Lid.make Lid.Comp ~path:"ui/Button" in
-  let result = Protocol.{ upserted = [ lid ]; refs_resolved = []; refs_pending = [] } in
+  let result =
+    Protocol.{ upserted = [ lid ]; refs_resolved = []; refs_pending = [] }
+  in
   let resp = Protocol.Emit_result result in
   match resp with
   | Protocol.Emit_result r ->
@@ -238,20 +262,23 @@ let test_protocol_error_storage _ =
 (* ── 9. Roundtrip: to_string . of_string = id ── *)
 
 let test_lid_of_string_to_string_identity _ =
-  let cases = [
-    "comp:ui/Button";
-    "store:auth";
-    "fn:utils/formatDate";
-    "type:UserDto";
-    "provide:theme";
-    "e2e:login-flow";
-  ] in
-  List.iter (fun s ->
-    match Lid.of_string s with
-    | Ok lid ->
-        assert_equal s (Lid.to_string lid) ~msg:("Identity failed: " ^ s)
-    | Error _ -> assert_failure ("Parse failed: " ^ s)
-  ) cases
+  let cases =
+    [
+      "comp:ui/Button";
+      "store:auth";
+      "fn:utils/formatDate";
+      "type:UserDto";
+      "provide:theme";
+      "e2e:login-flow";
+    ]
+  in
+  List.iter
+    (fun s ->
+      match Lid.of_string s with
+      | Ok lid ->
+          assert_equal s (Lid.to_string lid) ~msg:("Identity failed: " ^ s)
+      | Error _ -> assert_failure ("Parse failed: " ^ s))
+    cases
 
 (* ── Suite ── *)
 

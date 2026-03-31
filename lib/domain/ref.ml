@@ -1,18 +1,14 @@
 (* WHY fixed rel types? Enables queries like "show all calls". *)
 type rel =
-  | Belongs_to   (** fn belongs_to composable — parent-child *)
-  | Calls        (** useAuth calls loginAPI — function invocation *)
-  | Depends_on   (** Button depends_on lodash — import/require *)
-  | Contains     (** file contains function — structural nesting *)
-  | Implements   (** validate implements Validator — type conformance *)
-  | Renders      (** ParentComp renders ChildComp — template usage *)
-  | References   (** generic link when nothing else fits *)
+  | Belongs_to  (** fn belongs_to composable — parent-child *)
+  | Calls  (** useAuth calls loginAPI — function invocation *)
+  | Depends_on  (** Button depends_on lodash — import/require *)
+  | Contains  (** file contains function — structural nesting *)
+  | Implements  (** validate implements Validator — type conformance *)
+  | Renders  (** ParentComp renders ChildComp — template usage *)
+  | References  (** generic link when nothing else fits *)
 
-type pending = {
-  source : Lid.t;
-  target : Lid.t;
-  rel : rel;
-}
+type pending = { source : Lid.t; target : Lid.t; rel : rel }
 
 type resolved = {
   source : Lid.t;
@@ -22,7 +18,8 @@ type resolved = {
   target_id : int;
 }
 
-(* WHY not Ok/Error? Target_missing is normal - AI can describe code in any order. *)
+(* WHY not Ok/Error? Target_missing is normal - AI can describe code in any
+   order. *)
 type resolution =
   | Resolved of resolved
   | Source_missing of pending
@@ -38,8 +35,8 @@ let rel_to_string = function
   | Renders -> "renders"
   | References -> "references"
 
-let all_rels = [Belongs_to; Calls; Depends_on; Contains; Implements; Renders; References]
+let all_rels =
+  [ Belongs_to; Calls; Depends_on; Contains; Implements; Renders; References ]
 
 (* Derived from rel_to_string + all_rels — no manual maintenance *)
-let rel_of_string s =
-  List.find_opt (fun r -> rel_to_string r = s) all_rels
+let rel_of_string s = List.find_opt (fun r -> rel_to_string r = s) all_rels

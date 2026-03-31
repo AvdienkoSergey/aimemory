@@ -8,7 +8,8 @@
     - No production deployments yet
 
     When migrations become necessary (ALTER TABLE, production users with
-    persistent data), implement version check in meta table + incremental DDL. *)
+    persistent data), implement version check in meta table + incremental DDL.
+*)
 
 let version = 1
 

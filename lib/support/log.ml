@@ -18,7 +18,7 @@ let err msgf = Log.err msgf
 
 (* ── File rotation ── *)
 
-let max_log_size = 10 * 1024 * 1024  (* 10 MB *)
+let max_log_size = 10 * 1024 * 1024 (* 10 MB *)
 
 let rotate_if_needed path =
   try
@@ -35,12 +35,12 @@ let rotate_if_needed path =
 let pp_timestamp ppf () =
   let open Unix in
   let t = localtime (gettimeofday ()) in
-  Format.fprintf ppf "%04d-%02d-%02d %02d:%02d:%02d"
-    (t.tm_year + 1900) (t.tm_mon + 1) t.tm_mday
-    t.tm_hour t.tm_min t.tm_sec
+  Format.fprintf ppf "%04d-%02d-%02d %02d:%02d:%02d" (t.tm_year + 1900)
+    (t.tm_mon + 1) t.tm_mday t.tm_hour t.tm_min t.tm_sec
 
 let pp_level ppf level =
-  let s = match level with
+  let s =
+    match level with
     | Logs.App -> "APP"
     | Logs.Error -> "ERROR"
     | Logs.Warning -> "WARN"
@@ -49,11 +49,13 @@ let pp_level ppf level =
   in
   Format.fprintf ppf "%-5s" s
 
-(** Reporter that writes to file + stderr for errors.
-    Uses a buffer to capture message, then writes to file (and stderr for errors). *)
+(** Reporter that writes to file + stderr for errors. Uses a buffer to capture
+    message, then writes to file (and stderr for errors). *)
 let file_reporter ~file_path () =
   rotate_if_needed file_path;
-  let oc = open_out_gen [Open_append; Open_creat; Open_text] 0o644 file_path in
+  let oc =
+    open_out_gen [ Open_append; Open_creat; Open_text ] 0o644 file_path
+  in
   let file_ppf = Format.formatter_of_out_channel oc in
   let buf = Buffer.create 256 in
   let buf_ppf = Format.formatter_of_buffer buf in
@@ -66,13 +68,11 @@ let file_reporter ~file_path () =
       Format.fprintf file_ppf "%a [%a] %s@." pp_timestamp () pp_level level msg;
       Format.pp_print_flush file_ppf ();
       (* Errors also go to stderr *)
-      if level = Logs.Error then
-        Format.eprintf "[ERROR] %s@." msg;
+      if level = Logs.Error then Format.eprintf "[ERROR] %s@." msg;
       over ();
       k ()
     in
-    msgf @@ fun ?header:_ ?tags:_ fmt ->
-      Format.kfprintf finish buf_ppf fmt
+    msgf @@ fun ?header:_ ?tags:_ fmt -> Format.kfprintf finish buf_ppf fmt
   in
   { Logs.report }
 
@@ -83,15 +83,9 @@ let log_path_of_db_path db_path =
 
 (* ── Setup ── *)
 
-type config = {
-  db_path : string;
-  level : Logs.level option;
-}
+type config = { db_path : string; level : Logs.level option }
 
-let default_config = {
-  db_path = "context.db";
-  level = Some Logs.Info;
-}
+let default_config = { db_path = "context.db"; level = Some Logs.Info }
 
 let setup ?(config = default_config) () =
   let log_path = log_path_of_db_path config.db_path in

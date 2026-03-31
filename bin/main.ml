@@ -3,7 +3,8 @@
 let db_path = ref "context.db"
 let log_level = ref (Some Logs.Info)
 
-let usage = {|
+let usage =
+  {|
 AI Memory CLI
 
 Usage:
@@ -32,39 +33,33 @@ Logs are written to <db_name>.log (e.g., context.log for context.db)
 |}
 
 let setup_logging () =
-  let config = Log.{
-    db_path = !db_path;
-    level = !log_level;
-  } in
+  let config = Log.{ db_path = !db_path; level = !log_level } in
   ignore (Log.setup ~config ())
 
 let with_db f =
   match Repo.open_db !db_path with
   | Ok db ->
-    let result = f db in
-    Repo.close db;
-    result
+      let result = f db in
+      Repo.close db;
+      result
   | Error e ->
-    Log.err (fun m -> m "Database error: %s" (Repo.pp_error e));
-    Printf.eprintf "Database error: %s\n" (Repo.pp_error e);
-    exit 1
+      Log.err (fun m -> m "Database error: %s" (Repo.pp_error e));
+      Printf.eprintf "Database error: %s\n" (Repo.pp_error e);
+      exit 1
 
 let cmd_call tool args =
   Log.info (fun m -> m "call %s" tool);
   with_db (fun db ->
-    let result = Tools.dispatch db ~tool ~args in
-    print_endline result
-  )
+      let result = Tools.dispatch db ~tool ~args in
+      print_endline result)
 
-let cmd_schemas () =
-  print_endline (Tools.tool_schemas_string ())
+let cmd_schemas () = print_endline (Tools.tool_schemas_string ())
 
 let cmd_status () =
   Log.info (fun m -> m "status");
   with_db (fun db ->
-    let result = Tools.dispatch db ~tool:"status" ~args:"{}" in
-    print_endline result
-  )
+      let result = Tools.dispatch db ~tool:"status" ~args:"{}" in
+      print_endline result)
 
 let cmd_reset () =
   Log.info (fun m -> m "reset");
@@ -75,18 +70,13 @@ let cmd_reset () =
   end else
     Printf.printf "No database at %s\n" !db_path
 
-let cmd_mcp () =
-  with_db (fun db -> Mcp_server.run db)
+let cmd_mcp () = with_db (fun db -> Mcp_server.run db)
 
 let cmd_kinds () =
-  List.iter (fun k ->
-    Printf.printf "%s\n" (Lid.prefix_of_kind k)
-  ) Lid.all_kinds
+  List.iter (fun k -> Printf.printf "%s\n" (Lid.prefix_of_kind k)) Lid.all_kinds
 
 let cmd_rels () =
-  List.iter (fun r ->
-    Printf.printf "%s\n" (Ref.rel_to_string r)
-  ) Ref.all_rels
+  List.iter (fun r -> Printf.printf "%s\n" (Ref.rel_to_string r)) Ref.all_rels
 
 (* Parse options from args, return remaining args *)
 let rec parse_options = function
@@ -102,13 +92,13 @@ let rec parse_options = function
   | args -> args
 
 let run_command = function
-  | ["call"; tool; json_args] -> cmd_call tool json_args
-  | ["schemas"] -> cmd_schemas ()
-  | ["status"] -> cmd_status ()
-  | ["reset"] -> cmd_reset ()
-  | ["mcp"] -> cmd_mcp ()
-  | ["kinds"] -> cmd_kinds ()
-  | ["rels"] -> cmd_rels ()
+  | [ "call"; tool; json_args ] -> cmd_call tool json_args
+  | [ "schemas" ] -> cmd_schemas ()
+  | [ "status" ] -> cmd_status ()
+  | [ "reset" ] -> cmd_reset ()
+  | [ "mcp" ] -> cmd_mcp ()
+  | [ "kinds" ] -> cmd_kinds ()
+  | [ "rels" ] -> cmd_rels ()
   | _ ->
       print_endline usage;
       exit 1

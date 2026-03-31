@@ -1,0 +1,6 @@
+profile = default
+version = 0.29.0
+wrap-comments = true
+parse-docstrings = true
+break-cases = fit
+if-then-else = k-r

@@ -140,7 +140,7 @@ let test_query_entities_all _ctx =
   ignore
     (ok_or_fail
        (Repo.upsert_many db [ make_raw "fn:x" (); make_raw "type:x" () ]));
-  let (all, _total) = ok_or_fail (Repo.query_entities db ()) in
+  let all, _total = ok_or_fail (Repo.query_entities db ()) in
   assert_equal 2 (List.length all);
   Repo.close db
 
@@ -155,7 +155,7 @@ let test_query_entities_by_kind _ctx =
     | Ok l -> Lid.kind l
     | Error _ -> assert_failure "bad lid"
   in
-  let (results, _total) = ok_or_fail (Repo.query_entities db ~kind ()) in
+  let results, _total = ok_or_fail (Repo.query_entities db ~kind ()) in
   assert_equal 2 (List.length results);
   List.iter (fun e -> assert_equal kind (Lid.kind e.Entity.lid)) results;
   Repo.close db
@@ -170,7 +170,9 @@ let test_query_entities_by_pattern _ctx =
             make_raw "fn:auth/logout" ();
             make_raw "fn:home" ();
           ]));
-  let (results, _total) = ok_or_fail (Repo.query_entities db ~pattern:"auth/%" ()) in
+  let results, _total =
+    ok_or_fail (Repo.query_entities db ~pattern:"auth/%" ())
+  in
   assert_equal 2 (List.length results);
   Repo.close db
 
@@ -377,14 +379,14 @@ let setup_resolved_refs db =
 let test_query_refs_all _ctx =
   let db = open_mem _ctx in
   ignore (setup_resolved_refs db);
-  let (refs, _total) = ok_or_fail (Repo.query_refs db ()) in
+  let refs, _total = ok_or_fail (Repo.query_refs db ()) in
   assert_equal 3 (List.length refs);
   Repo.close db
 
 let test_query_refs_by_source _ctx =
   let db = open_mem _ctx in
   let la, _lb, _lc = setup_resolved_refs db in
-  let (refs, _total) = ok_or_fail (Repo.query_refs db ~source:la ()) in
+  let refs, _total = ok_or_fail (Repo.query_refs db ~source:la ()) in
   assert_equal 2 (List.length refs);
   List.iter (fun r -> assert_equal la r.Ref.source) refs;
   Repo.close db
@@ -392,7 +394,7 @@ let test_query_refs_by_source _ctx =
 let test_query_refs_by_target _ctx =
   let db = open_mem _ctx in
   let _la, _lb, lc = setup_resolved_refs db in
-  let (refs, _total) = ok_or_fail (Repo.query_refs db ~target:lc ()) in
+  let refs, _total = ok_or_fail (Repo.query_refs db ~target:lc ()) in
   assert_equal 2 (List.length refs);
   List.iter (fun r -> assert_equal lc r.Ref.target) refs;
   Repo.close db
@@ -400,7 +402,7 @@ let test_query_refs_by_target _ctx =
 let test_query_refs_by_rel _ctx =
   let db = open_mem _ctx in
   ignore (setup_resolved_refs db);
-  let (refs, _total) = ok_or_fail (Repo.query_refs db ~rel:Ref.Calls ()) in
+  let refs, _total = ok_or_fail (Repo.query_refs db ~rel:Ref.Calls ()) in
   assert_equal 2 (List.length refs);
   List.iter (fun r -> assert_equal Ref.Calls r.Ref.rel) refs;
   Repo.close db
@@ -408,7 +410,7 @@ let test_query_refs_by_rel _ctx =
 let test_query_refs_combined _ctx =
   let db = open_mem _ctx in
   let la, _lb, lc = setup_resolved_refs db in
-  let (refs, _total) = ok_or_fail (Repo.query_refs db ~source:la ~target:lc ()) in
+  let refs, _total = ok_or_fail (Repo.query_refs db ~source:la ~target:lc ()) in
   assert_equal 1 (List.length refs);
   Repo.close db
 
@@ -495,42 +497,63 @@ let test_all_lids_by_kind _ctx =
 
 let test_query_entities_with_limit _ctx =
   let db = open_mem _ctx in
-  ignore (ok_or_fail (Repo.upsert_many db [
-    make_raw "fn:a" (); make_raw "fn:b" (); make_raw "fn:c" ();
-    make_raw "fn:d" (); make_raw "fn:e" ();
-  ]));
-  let (results, total) = ok_or_fail (Repo.query_entities db ~limit:3 ()) in
+  ignore
+    (ok_or_fail
+       (Repo.upsert_many db
+          [
+            make_raw "fn:a" ();
+            make_raw "fn:b" ();
+            make_raw "fn:c" ();
+            make_raw "fn:d" ();
+            make_raw "fn:e" ();
+          ]));
+  let results, total = ok_or_fail (Repo.query_entities db ~limit:3 ()) in
   assert_equal 3 (List.length results);
   assert_equal 5 total;
   Repo.close db
 
 let test_query_entities_with_offset _ctx =
   let db = open_mem _ctx in
-  ignore (ok_or_fail (Repo.upsert_many db [
-    make_raw "fn:a" (); make_raw "fn:b" (); make_raw "fn:c" ();
-  ]));
+  ignore
+    (ok_or_fail
+       (Repo.upsert_many db
+          [ make_raw "fn:a" (); make_raw "fn:b" (); make_raw "fn:c" () ]));
   (* offset requires limit in SQLite *)
-  let (results, total) = ok_or_fail (Repo.query_entities db ~limit:10 ~offset:1 ()) in
+  let results, total =
+    ok_or_fail (Repo.query_entities db ~limit:10 ~offset:1 ())
+  in
   assert_equal 2 (List.length results);
   assert_equal 3 total;
   Repo.close db
 
 let test_query_entities_pagination _ctx =
   let db = open_mem _ctx in
-  ignore (ok_or_fail (Repo.upsert_many db [
-    make_raw "fn:a" (); make_raw "fn:b" (); make_raw "fn:c" ();
-    make_raw "fn:d" (); make_raw "fn:e" ();
-  ]));
+  ignore
+    (ok_or_fail
+       (Repo.upsert_many db
+          [
+            make_raw "fn:a" ();
+            make_raw "fn:b" ();
+            make_raw "fn:c" ();
+            make_raw "fn:d" ();
+            make_raw "fn:e" ();
+          ]));
   (* Page 1: first 2 items *)
-  let (page1, total1) = ok_or_fail (Repo.query_entities db ~limit:2 ~offset:0 ()) in
+  let page1, total1 =
+    ok_or_fail (Repo.query_entities db ~limit:2 ~offset:0 ())
+  in
   assert_equal 2 (List.length page1);
   assert_equal 5 total1;
   (* Page 2: next 2 items *)
-  let (page2, total2) = ok_or_fail (Repo.query_entities db ~limit:2 ~offset:2 ()) in
+  let page2, total2 =
+    ok_or_fail (Repo.query_entities db ~limit:2 ~offset:2 ())
+  in
   assert_equal 2 (List.length page2);
   assert_equal 5 total2;
   (* Page 3: last item *)
-  let (page3, total3) = ok_or_fail (Repo.query_entities db ~limit:2 ~offset:4 ()) in
+  let page3, total3 =
+    ok_or_fail (Repo.query_entities db ~limit:2 ~offset:4 ())
+  in
   assert_equal 1 (List.length page3);
   assert_equal 5 total3;
   Repo.close db
@@ -538,7 +561,7 @@ let test_query_entities_pagination _ctx =
 let test_query_refs_with_limit _ctx =
   let db = open_mem _ctx in
   ignore (setup_resolved_refs db);
-  let (refs, total) = ok_or_fail (Repo.query_refs db ~limit:2 ()) in
+  let refs, total = ok_or_fail (Repo.query_refs db ~limit:2 ()) in
   assert_equal 2 (List.length refs);
   assert_equal 3 total;
   Repo.close db
@@ -546,12 +569,11 @@ let test_query_refs_with_limit _ctx =
 let test_query_refs_pagination _ctx =
   let db = open_mem _ctx in
   ignore (setup_resolved_refs db);
-  let (page1, _) = ok_or_fail (Repo.query_refs db ~limit:2 ~offset:0 ()) in
+  let page1, _ = ok_or_fail (Repo.query_refs db ~limit:2 ~offset:0 ()) in
   assert_equal 2 (List.length page1);
-  let (page2, _) = ok_or_fail (Repo.query_refs db ~limit:2 ~offset:2 ()) in
+  let page2, _ = ok_or_fail (Repo.query_refs db ~limit:2 ~offset:2 ()) in
   assert_equal 1 (List.length page2);
   Repo.close db
-
 
 (* ------------------------------------------------------------------ *)
 (*  13. Transactions                                                    *)

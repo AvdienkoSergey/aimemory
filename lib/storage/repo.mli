@@ -4,11 +4,13 @@
     detail hidden behind [t].
 
     Type-driven contracts:
-    - [upsert] accepts [Entity.raw] (no PK) => returns [Entity.processed] (has PK)
+    - [upsert] accepts [Entity.raw] (no PK) => returns [Entity.processed] (has
+      PK)
     - [insert_ref] accepts [Ref.pending] (unverified) => stores it
     - [resolve_all] returns [Ref.resolved] for successful, [Ref.pending] for
       waiting
-    - You cannot construct [Entity.processed] without going through this module *)
+    - You cannot construct [Entity.processed] without going through this module
+*)
 
 (** {1 Handle & lifecycle} *)
 
@@ -69,12 +71,9 @@ val query_entities :
   ?offset:int ->
   unit ->
   (Entity.processed list * int, error) result
-(** Query entities with optional filters and pagination.
-    Returns [(items, total_count)].
-    [?kind] — filter by entity kind.
-    [?pattern] — SQL LIKE pattern on path.
-    [?limit] — max results.
-    [?offset] — skip first N. *)
+(** Query entities with optional filters and pagination. Returns
+    [(items, total_count)]. [?kind] — filter by entity kind. [?pattern] — SQL
+    LIKE pattern on path. [?limit] — max results. [?offset] — skip first N. *)
 
 val delete : t -> Lid.t -> (bool, error) result
 (** Delete entity by LID. Also deletes all refs where this LID is source or
@@ -103,9 +102,9 @@ val query_refs :
   ?offset:int ->
   unit ->
   (Ref.resolved list * int, error) result
-(** Query refs with optional filters and pagination.
-    Returns [(items, total_count)].
-    Only returns resolved refs (both endpoints exist). *)
+(** Query refs with optional filters and pagination. Returns
+    [(items, total_count)]. Only returns resolved refs (both endpoints exist).
+*)
 
 val pending_refs : t -> (Ref.pending list, error) result
 (** Get all pending (unresolved) refs. Useful for diagnostics. *)

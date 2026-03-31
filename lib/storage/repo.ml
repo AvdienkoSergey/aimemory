@@ -41,9 +41,8 @@ let collect_rows stmt parse_row =
   let rec loop acc =
     match Sqlite3.step stmt with
     | Sqlite3.Rc.ROW ->
-        let acc' = match parse_row stmt with
-          | Some v -> v :: acc
-          | None -> acc
+        let acc' =
+          match parse_row stmt with Some v -> v :: acc | None -> acc
         in
         loop acc'
     | _ -> List.rev acc
@@ -53,21 +52,21 @@ let collect_rows stmt parse_row =
 (** Entity.value ↔ Yojson.Safe.t conversion *)
 let rec value_to_json : Entity.value -> Yojson.Safe.t = function
   | Entity.String s -> `String s
-  | Entity.Int i    -> `Int i
-  | Entity.Float f  -> `Float f
-  | Entity.Bool b   -> `Bool b
-  | Entity.Null     -> `Null
-  | Entity.List vs  -> `List (List.map value_to_json vs)
+  | Entity.Int i -> `Int i
+  | Entity.Float f -> `Float f
+  | Entity.Bool b -> `Bool b
+  | Entity.Null -> `Null
+  | Entity.List vs -> `List (List.map value_to_json vs)
 
 let rec json_to_value : Yojson.Safe.t -> Entity.value = function
   | `String s -> Entity.String s
-  | `Int i    -> Entity.Int i
-  | `Float f  -> Entity.Float f
-  | `Bool b   -> Entity.Bool b
-  | `Null     -> Entity.Null
-  | `List vs  -> Entity.List (List.map json_to_value vs)
+  | `Int i -> Entity.Int i
+  | `Float f -> Entity.Float f
+  | `Bool b -> Entity.Bool b
+  | `Null -> Entity.Null
+  | `List vs -> Entity.List (List.map json_to_value vs)
   | `Assoc _ as obj -> Entity.String (Yojson.Safe.to_string obj)
-  | other     -> Entity.String (Yojson.Safe.to_string other)
+  | other -> Entity.String (Yojson.Safe.to_string other)
 
 (** Encode Entity.data => JSON string (for DB storage) *)
 let encode_data (d : Entity.data) : string =
@@ -245,29 +244,38 @@ let find_by_id t id =
   result
 
 let query_entities t ?kind ?pattern ?limit ?offset () =
-  let filters = List.filter_map Fun.id [
-    Option.map (fun k -> (" AND kind = ?", Sqlite3.Data.TEXT (Lid.prefix_of_kind k))) kind;
-    Option.map (fun p -> (" AND path LIKE ?", Sqlite3.Data.TEXT p)) pattern;
-  ] in
+  let filters =
+    List.filter_map Fun.id
+      [
+        Option.map
+          (fun k -> (" AND kind = ?", Sqlite3.Data.TEXT (Lid.prefix_of_kind k)))
+          kind;
+        Option.map (fun p -> (" AND path LIKE ?", Sqlite3.Data.TEXT p)) pattern;
+      ]
+  in
   let where_clause = String.concat "" (List.map fst filters) in
   let bind_filters stmt start_idx =
-    List.iteri (fun i (_, v) -> ignore (Sqlite3.bind stmt (start_idx + i) v)) filters
+    List.iteri
+      (fun i (_, v) -> ignore (Sqlite3.bind stmt (start_idx + i) v))
+      filters
   in
   (* Count total *)
   let count_sql = "SELECT COUNT(*) FROM entities WHERE 1=1" ^ where_clause in
   let count_stmt = Sqlite3.prepare t.db count_sql in
   bind_filters count_stmt 1;
-  let total = match Sqlite3.step count_stmt with
+  let total =
+    match Sqlite3.step count_stmt with
     | Sqlite3.Rc.ROW -> Sqlite3.Data.to_int_exn (Sqlite3.column count_stmt 0)
     | _ -> 0
   in
   ignore (Sqlite3.finalize count_stmt);
   (* Fetch page *)
   let base = "SELECT id, lid, data, created, updated FROM entities WHERE 1=1" in
-  let pagination = match limit with
+  let pagination =
+    match limit with
     | Some l ->
-      let o = Option.value offset ~default:0 in
-      Printf.sprintf " LIMIT %d OFFSET %d" l o
+        let o = Option.value offset ~default:0 in
+        Printf.sprintf " LIMIT %d OFFSET %d" l o
     | None -> ""
   in
   let sql = base ^ where_clause ^ " ORDER BY lid" ^ pagination in
@@ -321,14 +329,15 @@ let insert_refs t refs =
       in
       loop refs)
 
-(** Parse resolved ref row: source_lid, target_lid, rel_type, source_id, target_id *)
+(** Parse resolved ref row: source_lid, target_lid, rel_type, source_id,
+    target_id *)
 let row_to_resolved stmt =
   let src_s = Sqlite3.Data.to_string_exn (Sqlite3.column stmt 0) in
   let tgt_s = Sqlite3.Data.to_string_exn (Sqlite3.column stmt 1) in
   let rel_s = Sqlite3.Data.to_string_exn (Sqlite3.column stmt 2) in
   let src_id = Sqlite3.Data.to_int_exn (Sqlite3.column stmt 3) in
   let tgt_id = Sqlite3.Data.to_int_exn (Sqlite3.column stmt 4) in
-  match Lid.of_string src_s, Lid.of_string tgt_s, Ref.rel_of_string rel_s with
+  match (Lid.of_string src_s, Lid.of_string tgt_s, Ref.rel_of_string rel_s) with
   | Ok source, Ok target, Some rel ->
       Some Ref.{ source; target; rel; source_id = src_id; target_id = tgt_id }
   | _ -> None
@@ -338,7 +347,7 @@ let row_to_pending stmt =
   let src_s = Sqlite3.Data.to_string_exn (Sqlite3.column stmt 0) in
   let tgt_s = Sqlite3.Data.to_string_exn (Sqlite3.column stmt 1) in
   let rel_s = Sqlite3.Data.to_string_exn (Sqlite3.column stmt 2) in
-  match Lid.of_string src_s, Lid.of_string tgt_s, Ref.rel_of_string rel_s with
+  match (Lid.of_string src_s, Lid.of_string tgt_s, Ref.rel_of_string rel_s) with
   | Ok source, Ok target, Some rel -> Some Ref.{ source; target; rel }
   | _ -> None
 
@@ -367,25 +376,39 @@ let resolve_all t =
       Ok (resolved, pending)
 
 let query_refs t ?source ?target ?rel ?limit ?offset () =
-  let filters = List.filter_map Fun.id [
-    Option.map (fun s -> (" AND r.source_lid = ?", Sqlite3.Data.TEXT (Lid.to_string s))) source;
-    Option.map (fun t -> (" AND r.target_lid = ?", Sqlite3.Data.TEXT (Lid.to_string t))) target;
-    Option.map (fun r -> (" AND r.rel_type = ?", Sqlite3.Data.TEXT (Ref.rel_to_string r))) rel;
-  ] in
+  let filters =
+    List.filter_map Fun.id
+      [
+        Option.map
+          (fun s ->
+            (" AND r.source_lid = ?", Sqlite3.Data.TEXT (Lid.to_string s)))
+          source;
+        Option.map
+          (fun t ->
+            (" AND r.target_lid = ?", Sqlite3.Data.TEXT (Lid.to_string t)))
+          target;
+        Option.map
+          (fun r ->
+            (" AND r.rel_type = ?", Sqlite3.Data.TEXT (Ref.rel_to_string r)))
+          rel;
+      ]
+  in
   let where_clause = String.concat "" (List.map fst filters) in
   let bind_filters stmt start_idx =
-    List.iteri (fun i (_, v) -> ignore (Sqlite3.bind stmt (start_idx + i) v)) filters
+    List.iteri
+      (fun i (_, v) -> ignore (Sqlite3.bind stmt (start_idx + i) v))
+      filters
   in
   (* Count total *)
   let count_sql =
-    "SELECT COUNT(*) FROM refs r \
-     JOIN entities es ON es.lid = r.source_lid \
-     JOIN entities et ON et.lid = r.target_lid \
-     WHERE r.resolved = 1" ^ where_clause
+    "SELECT COUNT(*) FROM refs r JOIN entities es ON es.lid = r.source_lid \
+     JOIN entities et ON et.lid = r.target_lid WHERE r.resolved = 1"
+    ^ where_clause
   in
   let count_stmt = Sqlite3.prepare t.db count_sql in
   bind_filters count_stmt 1;
-  let total = match Sqlite3.step count_stmt with
+  let total =
+    match Sqlite3.step count_stmt with
     | Sqlite3.Rc.ROW -> Sqlite3.Data.to_int_exn (Sqlite3.column count_stmt 0)
     | _ -> 0
   in
@@ -396,10 +419,11 @@ let query_refs t ?source ?target ?rel ?limit ?offset () =
      JOIN entities es ON es.lid = r.source_lid JOIN entities et ON et.lid = \
      r.target_lid WHERE r.resolved = 1"
   in
-  let pagination = match limit with
+  let pagination =
+    match limit with
     | Some l ->
-      let o = Option.value offset ~default:0 in
-      Printf.sprintf " LIMIT %d OFFSET %d" l o
+        let o = Option.value offset ~default:0 in
+        Printf.sprintf " LIMIT %d OFFSET %d" l o
     | None -> ""
   in
   let sql = base ^ where_clause ^ pagination in
@@ -446,10 +470,12 @@ let all_lids t ?kind () =
     let lid_s = Sqlite3.Data.to_string_exn (Sqlite3.column stmt 0) in
     Result.to_option (Lid.of_string lid_s)
   in
-  let sql, bind = match kind with
-    | Some k -> "SELECT lid FROM entities WHERE kind = ? ORDER BY lid",
-                Some (Sqlite3.Data.TEXT (Lid.prefix_of_kind k))
-    | None -> "SELECT lid FROM entities ORDER BY lid", None
+  let sql, bind =
+    match kind with
+    | Some k ->
+        ( "SELECT lid FROM entities WHERE kind = ? ORDER BY lid",
+          Some (Sqlite3.Data.TEXT (Lid.prefix_of_kind k)) )
+    | None -> ("SELECT lid FROM entities ORDER BY lid", None)
   in
   let stmt = Sqlite3.prepare t.db sql in
   Option.iter (fun v -> ignore (Sqlite3.bind stmt 1 v)) bind;

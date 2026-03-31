@@ -1,6 +1,7 @@
 type t = { kind : kind; path : string } [@@deriving compare, equal, hash]
 
-(* When adding a new variant: update prefix_of_kind, kind_of_prefix, AND all_kinds *)
+(* When adding a new variant: update prefix_of_kind, kind_of_prefix, AND
+   all_kinds *)
 and kind =
   | Comp
   | View
@@ -65,9 +66,9 @@ let prefix_of_kind = function
   | Typ -> "type"
   | Provide -> "provide"
 
-(* IMPORTANT: Update this list when adding a new kind variant!
-   The compiler won't warn — pattern matching in prefix_of_kind/kind_of_prefix
-   will catch missing cases, but this list must be updated manually. *)
+(* IMPORTANT: Update this list when adding a new kind variant! The compiler
+   won't warn — pattern matching in prefix_of_kind/kind_of_prefix will catch
+   missing cases, but this list must be updated manually. *)
 let all_kinds =
   [
     Comp;
@@ -102,18 +103,19 @@ let all_kinds =
   ]
 
 (* Derived from prefix_of_kind + all_kinds — no manual maintenance *)
-let kind_of_prefix s =
-  List.find_opt (fun k -> prefix_of_kind k = s) all_kinds
+let kind_of_prefix s = List.find_opt (fun k -> prefix_of_kind k = s) all_kinds
 
 let of_string s =
-  if String.length s = 0 then Error Empty
+  if String.length s = 0 then
+    Error Empty
   else
     match String.index_opt s ':' with
     | None -> Error Missing_colon
     | Some i -> (
         let prefix = String.sub s 0 i in
         let path = String.sub s (i + 1) (String.length s - i - 1) in
-        if String.length path = 0 then Error Empty_path
+        if String.length path = 0 then
+          Error Empty_path
         else
           match kind_of_prefix prefix with
           | None -> Error (Unknown_kind prefix)
