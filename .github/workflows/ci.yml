@@ -90,13 +90,22 @@ jobs:
 
       - name: Generate coverage summary
         run: |
+          COVERAGE_FILES=$(find _build -name '*.coverage' | tr '\n' ' ')
           echo '## Coverage Report' >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          opam exec -- bisect-ppx-report summary _build/default/*.coverage >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$COVERAGE_FILES" ]; then
+            opam exec -- bisect-ppx-report summary $COVERAGE_FILES >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No coverage data found.' >> "$GITHUB_STEP_SUMMARY"
+          fi
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Generate HTML report
-        run: opam exec -- bisect-ppx-report html -o _coverage _build/default/*.coverage
+        run: |
+          COVERAGE_FILES=$(find _build -name '*.coverage' | tr '\n' ' ')
+          if [ -n "$COVERAGE_FILES" ]; then
+            opam exec -- bisect-ppx-report html -o _coverage $COVERAGE_FILES
+          fi
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
