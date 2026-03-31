@@ -48,3 +48,58 @@ jobs:
 
       - name: Lint opam files
         run: opam lint aimemory.opam
+
+  fmt:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: '5.2'
+
+      - name: Install ocamlformat
+        run: opam install ocamlformat.0.29.0
+
+      - name: Check formatting
+        run: opam exec -- dune build @fmt
+
+  coverage:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: '5.2'
+
+      - name: Install dependencies
+        run: opam install . --deps-only --with-test
+
+      - name: Install bisect_ppx
+        run: opam install bisect_ppx
+
+      - name: Run tests with coverage
+        run: opam exec -- dune runtest --instrument-with bisect_ppx
+
+      - name: Generate coverage summary
+        run: |
+          echo '## Coverage Report' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          opam exec -- bisect-ppx-report summary >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Generate HTML report
+        run: opam exec -- bisect-ppx-report html -o _coverage
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: _coverage/
