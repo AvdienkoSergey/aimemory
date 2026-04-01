@@ -185,12 +185,12 @@ After the analysis show:
 - Give a couple of prompts, one easy and one hard, to test the analysis
 ```
 
-### 1.6 Adding ctx-scanner for automatic analysis
+### 1.6 Adding ast-scanner for automatic analysis
 
-AI agent analyzes code file by file with grep/glob. On large projects this is slow. [ctx-scanner](https://github.com/AvdienkoSergey/ctx-scanner) parses TypeScript/Vue/React AST in seconds and fills the aimemory database automatically.
+AI agent analyzes code file by file with grep/glob. On large projects this is slow. [ast-scanner](https://github.com/AvdienkoSergey/ast-scanner) parses TypeScript/Vue AST in seconds and fills the aimemory database automatically.
 
 ```
-  source files          ctx-scanner              aimemory
+  source files         ast-scanner              aimemory
  .ts .tsx .vue  -->  TypeScript AST  -->  fn: entities in SQLite
                        (MCP stdio)               |
                                                  | MCP
@@ -202,10 +202,10 @@ Scanner connects as a second MCP server next to aimemory. AI gets `scan` and `re
 #### Installation
 
 ```bash
-git clone https://github.com/AvdienkoSergey/ctx-scanner.git
-cd ctx-scanner
+git clone https://github.com/AvdienkoSergey/ast-scanner
+cd ast-scanner
 npm install && npm run build
-npm link   # makes ctx-scanner command available globally
+npm link   # makes ast-scanner command available globally
 ```
 
 #### Setting up .mcp.json
@@ -220,9 +220,9 @@ Add scanner next to aimemory:
       "command": "aimemory",
       "args": ["--db", "./context.db", "mcp"]
     },
-    "scanner": {
+    "ast-scanner": {
       "type": "stdio",
-      "command": "ctx-scanner",
+      "command": "ast-scanner",
       "args": ["mcp"]
     }
   }
@@ -234,7 +234,7 @@ After restarting the IDE, AI will have two sets of tools:
 | Server | Tools | Purpose |
 |--------|-------|---------|
 | aimemory | `emit`, `query_entities`, `query_refs`, `status` | Storage and queries |
-| scanner | `scan`, `report` | AST parsing of source files |
+| ast-scanner | `scan`, `report` | AST parsing of source files |
 
 #### What scanner extracts
 
