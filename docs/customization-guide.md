@@ -11,7 +11,7 @@
 > exist in your system and how they relate to each other.
 
 aimemory ships with a vocabulary tuned for a specific domain. The branch
-[`jira-and-gitlab`](https://github.com/your-org/aimemory/tree/jira-and-gitlab)
+[`jira-and-gitlab`](https://github.com/AvdienkoSergey/aimemory/tree/jira-and-gitlab)
 replaces the original Vue/frontend kinds with entities for **Jira + GitLab**
 collection. If your project needs a different domain, change the vocabulary.
 
