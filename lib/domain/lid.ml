@@ -3,103 +3,69 @@ type t = { kind : kind; path : string } [@@deriving compare, equal, hash]
 (* When adding a new variant: update prefix_of_kind, kind_of_prefix, AND
    all_kinds *)
 and kind =
-  | Comp
-  | View
-  | Layout
-  | Store
-  | Service
-  | Composable
-  | Intercept
-  | Validator
-  | Util
-  | Plugin
-  | Provider
-  | Route
-  | Locale
-  | Const
-  | Style
-  | Unit
-  | E2e
-  | Asset
-  | Api
-  | Dep
-  | Fn
-  | State
-  | Computed
-  | Action
-  | Prop
-  | Emit
-  | Hook
-  | Typ
-  | Provide
+  (* Jira entities *)
+  | Issue       (** задача/тикет, e.g. issue:DBO-123 *)
+  | Epic        (** эпик, e.g. epic:DBO-100 *)
+  | Sprint      (** спринт, e.g. sprint:42 *)
+  | Board       (** доска, e.g. board:5 *)
+  | Version     (** версия/релиз Jira, e.g. version:1.2.3 *)
+  | JiraProject (** проект Jira, e.g. jproject:DBO *)
+  | JiraUser    (** пользователь Jira, e.g. juser:ivan.petrov *)
+  (* GitLab entities *)
+  | MergeRequest (** merge request, e.g. mr:backend/456 *)
+  | Pipeline     (** пайплайн CI/CD, e.g. pipeline:789 *)
+  | Job          (** шаг пайплайна, e.g. job:1234 *)
+  | Commit       (** коммит, e.g. commit:abc123def *)
+  | Branch       (** ветка, e.g. branch:feature/login *)
+  | Deployment   (** деплой, e.g. deploy:prod/2024-01 *)
+  | Release      (** релиз GitLab, e.g. release:v1.2.3 *)
+  | GlProject    (** проект GitLab, e.g. glproject:backend *)
+  | GlUser       (** пользователь GitLab, e.g. gluser:ivan.petrov *)
+  | Milestone    (** майлстоун, e.g. milestone:Q1-2025 *)
 
 type parse_error = Empty | Missing_colon | Unknown_kind of string | Empty_path
 
 let prefix_of_kind = function
-  | Comp -> "comp"
-  | View -> "view"
-  | Layout -> "layout"
-  | Store -> "store"
-  | Service -> "service"
-  | Composable -> "composable"
-  | Intercept -> "intercept"
-  | Validator -> "validator"
-  | Util -> "util"
-  | Plugin -> "plugin"
-  | Provider -> "provider"
-  | Route -> "route"
-  | Locale -> "locale"
-  | Const -> "const"
-  | Style -> "style"
-  | Unit -> "unit"
-  | E2e -> "e2e"
-  | Asset -> "asset"
-  | Api -> "api"
-  | Dep -> "dep"
-  | Fn -> "fn"
-  | State -> "state"
-  | Computed -> "computed"
-  | Action -> "action"
-  | Prop -> "prop"
-  | Emit -> "emit"
-  | Hook -> "hook"
-  | Typ -> "type"
-  | Provide -> "provide"
+  | Issue -> "issue"
+  | Epic -> "epic"
+  | Sprint -> "sprint"
+  | Board -> "board"
+  | Version -> "version"
+  | JiraProject -> "jproject"
+  | JiraUser -> "juser"
+  | MergeRequest -> "mr"
+  | Pipeline -> "pipeline"
+  | Job -> "job"
+  | Commit -> "commit"
+  | Branch -> "branch"
+  | Deployment -> "deploy"
+  | Release -> "release"
+  | GlProject -> "glproject"
+  | GlUser -> "gluser"
+  | Milestone -> "milestone"
 
 (* IMPORTANT: Update this list when adding a new kind variant! The compiler
    won't warn — pattern matching in prefix_of_kind/kind_of_prefix will catch
    missing cases, but this list must be updated manually. *)
 let all_kinds =
   [
-    Comp;
-    View;
-    Layout;
-    Store;
-    Service;
-    Composable;
-    Intercept;
-    Validator;
-    Util;
-    Plugin;
-    Provider;
-    Route;
-    Locale;
-    Const;
-    Style;
-    Unit;
-    E2e;
-    Asset;
-    Api;
-    Dep;
-    Fn;
-    State;
-    Computed;
-    Action;
-    Prop;
-    Emit;
-    Hook;
-    Typ;
-    Provide;
+    Issue;
+    Epic;
+    Sprint;
+    Board;
+    Version;
+    JiraProject;
+    JiraUser;
+    MergeRequest;
+    Pipeline;
+    Job;
+    Commit;
+    Branch;
+    Deployment;
+    Release;
+    GlProject;
+    GlUser;
+    Milestone;
   ]
 
 (* Derived from prefix_of_kind + all_kinds — no manual maintenance *)
