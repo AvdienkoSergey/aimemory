@@ -71,15 +71,15 @@ let test_parse_entity_input_valid _ctx =
     Yojson.Safe.from_string
       {|
     {
-      "lid": "fn:auth/login",
-      "data": {"async": true},
-      "refs": [{"target": "fn:api/call", "rel": "calls"}]
+      "lid": "issue:DBO-123",
+      "data": {"story_points": 5},
+      "refs": [{"target": "mr:backend/456", "rel": "linked_to"}]
     }
   |}
   in
   match Tools.parse_entity_input json with
   | Ok ei ->
-      assert_equal "auth/login" (Lid.path ei.lid);
+      assert_equal "DBO-123" (Lid.path ei.lid);
       assert_equal 1 (List.length ei.refs)
   | Error e -> assert_failure e
 
@@ -98,7 +98,7 @@ let test_parse_entity_input_invalid_lid _ctx =
 let test_parse_emit_valid _ctx =
   let json =
     Yojson.Safe.from_string {|
-    {"entities": [{"lid": "fn:test"}]}
+    {"entities": [{"lid": "issue:DBO-1"}]}
   |}
   in
   match Tools.parse_emit json with
@@ -121,9 +121,9 @@ let test_parse_query_entities_all _ctx =
   | _ -> assert_failure "expected Query_entities"
 
 let test_parse_query_entities_with_kind _ctx =
-  let json = Yojson.Safe.from_string {|{"kind": "fn"}|} in
+  let json = Yojson.Safe.from_string {|{"kind": "issue"}|} in
   match Tools.parse_query_entities json with
-  | Ok (Protocol.Query_entities q) -> assert_equal (Some Lid.Fn) q.kind
+  | Ok (Protocol.Query_entities q) -> assert_equal (Some Lid.Issue) q.kind
   | _ -> assert_failure "expected Query_entities with kind"
 
 let test_parse_query_entities_with_pattern _ctx =
@@ -142,11 +142,11 @@ let test_parse_query_refs_all _ctx =
   | _ -> assert_failure "expected Query_refs"
 
 let test_parse_query_refs_with_source _ctx =
-  let json = Yojson.Safe.from_string {|{"source": "fn:caller"}|} in
+  let json = Yojson.Safe.from_string {|{"source": "issue:DBO-123"}|} in
   match Tools.parse_query_refs json with
   | Ok (Protocol.Query_refs q) -> (
       match q.source with
-      | Some lid -> assert_equal "caller" (Lid.path lid)
+      | Some lid -> assert_equal "DBO-123" (Lid.path lid)
       | None -> assert_failure "expected source")
   | _ -> assert_failure "expected Query_refs"
 
@@ -156,7 +156,7 @@ let test_parse_query_refs_with_source _ctx =
 
 let test_dispatch_emit _ctx =
   let db = open_mem _ctx in
-  let args = {|{"entities": [{"lid": "fn:hello", "data": {"msg": "hi"}}]}|} in
+  let args = {|{"entities": [{"lid": "issue:DBO-1", "data": {"msg": "hi"}}]}|} in
   let result = Tools.dispatch db ~tool:"emit" ~args in
   let json = Yojson.Safe.from_string result in
   (match json with
@@ -170,10 +170,10 @@ let test_dispatch_query_entities _ctx =
   let db = open_mem _ctx in
   let _ =
     Tools.dispatch db ~tool:"emit"
-      ~args:{|{"entities": [{"lid": "fn:a"}, {"lid": "fn:b"}]}|}
+      ~args:{|{"entities": [{"lid": "issue:DBO-1"}, {"lid": "issue:DBO-2"}]}|}
   in
   let result =
-    Tools.dispatch db ~tool:"query_entities" ~args:{|{"kind": "fn"}|}
+    Tools.dispatch db ~tool:"query_entities" ~args:{|{"kind": "issue"}|}
   in
   let json = Yojson.Safe.from_string result in
   (match json with
@@ -189,8 +189,8 @@ let test_dispatch_query_refs _ctx =
     Tools.dispatch db ~tool:"emit"
       ~args:
         {|{"entities": [
-        {"lid": "fn:caller"},
-        {"lid": "fn:callee", "refs": [{"target": "fn:caller", "rel": "calls"}]}
+        {"lid": "issue:DBO-1"},
+        {"lid": "mr:backend/1", "refs": [{"target": "issue:DBO-1", "rel": "linked_to"}]}
       ]}|}
   in
   let result = Tools.dispatch db ~tool:"query_refs" ~args:{|{}|} in
@@ -205,7 +205,7 @@ let test_dispatch_query_refs _ctx =
 let test_dispatch_status _ctx =
   let db = open_mem _ctx in
   let _ =
-    Tools.dispatch db ~tool:"emit" ~args:{|{"entities": [{"lid": "fn:x"}]}|}
+    Tools.dispatch db ~tool:"emit" ~args:{|{"entities": [{"lid": "issue:DBO-99"}]}|}
   in
   let result = Tools.dispatch db ~tool:"status" ~args:"{}" in
   let json = Yojson.Safe.from_string result in

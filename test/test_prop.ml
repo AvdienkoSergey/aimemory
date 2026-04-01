@@ -16,16 +16,7 @@ let gen_path =
 
 let gen_lid = Gen.map2 (fun k p -> Lid.make k ~path:p) gen_kind gen_path
 
-let gen_rel =
-  Gen.oneof_list
-    [
-      Ref.Belongs_to;
-      Ref.Calls;
-      Ref.Depends_on;
-      Ref.Contains;
-      Ref.Implements;
-      Ref.References;
-    ]
+let gen_rel = Gen.oneof_list Ref.all_rels
 
 let rec gen_value depth =
   if depth <= 0 then

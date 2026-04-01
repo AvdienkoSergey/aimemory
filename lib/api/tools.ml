@@ -366,19 +366,21 @@ let tool_schemas () : t =
                                                     ( "description",
                                                       `String
                                                         "Logical ID in format \
-                                                         'kind:path'. Module \
-                                                         kinds: comp, view, \
-                                                         layout, store, \
-                                                         service, composable, \
-                                                         util, api, dep. Inner \
-                                                         kinds: fn, state, \
-                                                         computed, action, \
-                                                         prop, emit, hook, \
-                                                         type. Examples: \
-                                                         'comp:ui/Button', \
-                                                         'fn:useAuth/login', \
-                                                         'store:cart', \
-                                                         'dep:lodash'" );
+                                                         'kind:path'. Jira \
+                                                         kinds: issue, epic, \
+                                                         sprint, board, \
+                                                         version, jproject, \
+                                                         juser. GitLab kinds: \
+                                                         mr, pipeline, job, \
+                                                         commit, branch, \
+                                                         deploy, release, \
+                                                         glproject, gluser, \
+                                                         milestone. Examples: \
+                                                         'issue:DBO-123', \
+                                                         'mr:backend/456', \
+                                                         'pipeline:789', \
+                                                         'commit:abc123def', \
+                                                         'sprint:42'" );
                                                   ] );
                                               ( "data",
                                                 `Assoc
@@ -455,25 +457,41 @@ let tool_schemas () : t =
                                                                       );
                                                                       ( "description",
                                                                         `String
-                                                                          "belongs_to: \
-                                                                           parent-child \
-                                                                           (fn \
+                                                                          "linked_to: \
+                                                                           issue \
+                                                                           linked \
+                                                                           to \
+                                                                           mr \
+                                                                           via \
+                                                                           DevStatus. \
+                                                                           belongs_to: \
+                                                                           issue \
                                                                            in \
-                                                                           composable). \
-                                                                           calls: \
-                                                                           function \
-                                                                           invocation. \
-                                                                           depends_on: \
-                                                                           import/require. \
+                                                                           sprint, \
+                                                                           mr \
+                                                                           in \
+                                                                           pipeline. \
                                                                            contains: \
-                                                                           structural \
-                                                                           nesting \
-                                                                           (file \
-                                                                           contains \
-                                                                           fn). \
-                                                                           implements: \
-                                                                           type \
-                                                                           conformance. \
+                                                                           sprint \
+                                                                           has \
+                                                                           issues, \
+                                                                           pipeline \
+                                                                           has \
+                                                                           jobs. \
+                                                                           triggered_by: \
+                                                                           pipeline \
+                                                                           from \
+                                                                           mr. \
+                                                                           deployed_via: \
+                                                                           issue \
+                                                                           in \
+                                                                           deployment. \
+                                                                           reviewed_by: \
+                                                                           mr \
+                                                                           reviewer. \
+                                                                           assigned_to: \
+                                                                           issue/mr \
+                                                                           assignee. \
                                                                            references: \
                                                                            generic \
                                                                            fallback."
@@ -516,10 +534,11 @@ let tool_schemas () : t =
                                          Lid.all_kinds) );
                                   ( "description",
                                     `String
-                                      "Filter by entity kind. Module: comp, \
-                                       view, store, composable, service, util, \
-                                       api, dep. Inner: fn, state, computed, \
-                                       prop, type." );
+                                      "Filter by entity kind. Jira: issue, \
+                                       epic, sprint, board, version, jproject, \
+                                       juser. GitLab: mr, pipeline, job, \
+                                       commit, branch, deploy, release, \
+                                       glproject, gluser, milestone." );
                                 ] );
                             ( "pattern",
                               `Assoc
@@ -587,19 +606,24 @@ let tool_schemas () : t =
                                       (List.map
                                          (fun s -> `String s)
                                          [
+                                           "linked_to";
                                            "belongs_to";
-                                           "calls";
-                                           "depends_on";
                                            "contains";
-                                           "implements";
-                                           "renders";
+                                           "triggered_by";
+                                           "deployed_via";
+                                           "reviewed_by";
+                                           "assigned_to";
                                            "references";
                                          ]) );
                                   ( "description",
                                     `String
-                                      "Filter by rel. calls: who calls what. \
-                                       depends_on: imports. contains: nesting. \
-                                       belongs_to: parent. implements: types."
+                                      "Filter by rel. linked_to: issue↔mr via \
+                                       DevStatus. belongs_to: issue in sprint. \
+                                       contains: sprint has issues. \
+                                       triggered_by: pipeline from mr. \
+                                       deployed_via: issue in deploy. \
+                                       reviewed_by: mr reviewer. \
+                                       assigned_to: assignee."
                                   );
                                 ] );
                             ( "limit",

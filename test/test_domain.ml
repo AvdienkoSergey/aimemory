@@ -5,30 +5,30 @@ open OUnit2
 
 (* ── 1. Lid.of_string — valid cases ── *)
 
-let test_lid_parse_valid_comp _ =
-  match Lid.of_string "comp:ui/Button" with
+let test_lid_parse_valid_issue _ =
+  match Lid.of_string "issue:DBO-123" with
   | Ok lid ->
-      assert_equal Lid.Comp (Lid.kind lid);
-      assert_equal "ui/Button" (Lid.path lid)
-  | Error _ -> assert_failure "Expected Ok for 'comp:ui/Button'"
+      assert_equal Lid.Issue (Lid.kind lid);
+      assert_equal "DBO-123" (Lid.path lid)
+  | Error _ -> assert_failure "Expected Ok for 'issue:DBO-123'"
 
-let test_lid_parse_valid_store _ =
-  match Lid.of_string "store:auth" with
+let test_lid_parse_valid_sprint _ =
+  match Lid.of_string "sprint:42" with
   | Ok lid ->
-      assert_equal Lid.Store (Lid.kind lid);
-      assert_equal "auth" (Lid.path lid)
-  | Error _ -> assert_failure "Expected Ok for 'store:auth'"
+      assert_equal Lid.Sprint (Lid.kind lid);
+      assert_equal "42" (Lid.path lid)
+  | Error _ -> assert_failure "Expected Ok for 'sprint:42'"
 
-let test_lid_parse_valid_type _ =
-  match Lid.of_string "type:UserDto" with
+let test_lid_parse_valid_mr _ =
+  match Lid.of_string "mr:backend/456" with
   | Ok lid ->
-      assert_equal Lid.Typ (Lid.kind lid);
-      assert_equal "UserDto" (Lid.path lid)
-  | Error _ -> assert_failure "Expected Ok for 'type:UserDto'"
+      assert_equal Lid.MergeRequest (Lid.kind lid);
+      assert_equal "backend/456" (Lid.path lid)
+  | Error _ -> assert_failure "Expected Ok for 'mr:backend/456'"
 
 let test_lid_parse_path_with_slashes _ =
-  match Lid.of_string "fn:auth/login/validatePassword" with
-  | Ok lid -> assert_equal "auth/login/validatePassword" (Lid.path lid)
+  match Lid.of_string "commit:abc/def/ghi" with
+  | Ok lid -> assert_equal "abc/def/ghi" (Lid.path lid)
   | Error _ -> assert_failure "Expected Ok for deep path"
 
 (* ── 2. Lid.of_string — errors ── *)
@@ -36,7 +36,7 @@ let test_lid_parse_path_with_slashes _ =
 let test_lid_parse_empty _ = assert_equal (Error Lid.Empty) (Lid.of_string "")
 
 let test_lid_parse_missing_colon _ =
-  assert_equal (Error Lid.Missing_colon) (Lid.of_string "compButton")
+  assert_equal (Error Lid.Missing_colon) (Lid.of_string "issueDBO-123")
 
 let test_lid_parse_unknown_kind _ =
   match Lid.of_string "widget:foo" with
@@ -44,13 +44,13 @@ let test_lid_parse_unknown_kind _ =
   | _ -> assert_failure "Expected Unknown_kind \"widget\""
 
 let test_lid_parse_empty_path _ =
-  assert_equal (Error Lid.Empty_path) (Lid.of_string "comp:")
+  assert_equal (Error Lid.Empty_path) (Lid.of_string "issue:")
 
 (* ── 3. Lid.make + to_string — roundtrip ── *)
 
 let test_lid_roundtrip _ =
-  let lid = Lid.make Lid.Composable ~path:"useAuth" in
-  assert_equal "composable:useAuth" (Lid.to_string lid)
+  let lid = Lid.make Lid.Sprint ~path:"42" in
+  assert_equal "sprint:42" (Lid.to_string lid)
 
 let test_lid_roundtrip_all_kinds _ =
   List.iter
@@ -64,27 +64,27 @@ let test_lid_roundtrip_all_kinds _ =
 (* ── 4. Lid equality ── *)
 
 let test_lid_equal _ =
-  let a = Lid.make Lid.Store ~path:"auth" in
-  let b = Lid.make Lid.Store ~path:"auth" in
+  let a = Lid.make Lid.Sprint ~path:"42" in
+  let b = Lid.make Lid.Sprint ~path:"42" in
   assert_equal (Lid.to_string a) (Lid.to_string b)
 
 let test_lid_not_equal_different_kind _ =
-  let a = Lid.make Lid.Comp ~path:"auth" in
-  let b = Lid.make Lid.Store ~path:"auth" in
+  let a = Lid.make Lid.Issue ~path:"DBO-1" in
+  let b = Lid.make Lid.Sprint ~path:"DBO-1" in
   assert_bool "Different kinds must differ" (Lid.to_string a <> Lid.to_string b)
 
 (* ── 5. Lid.Map и Lid.Set ── *)
 
 let test_lid_map _ =
-  let a = Lid.make Lid.Fn ~path:"doThing" in
-  let b = Lid.make Lid.Fn ~path:"otherThing" in
+  let a = Lid.make Lid.Commit ~path:"abc123" in
+  let b = Lid.make Lid.Commit ~path:"def456" in
   let m = Lid.Map.empty |> Lid.Map.add a 1 |> Lid.Map.add b 2 in
   assert_equal 1 (Lid.Map.find a m);
   assert_equal 2 (Lid.Map.find b m);
   assert_equal 2 (Lid.Map.cardinal m)
 
 let test_lid_set_no_duplicates _ =
-  let a = Lid.make Lid.Api ~path:"users" in
+  let a = Lid.make Lid.MergeRequest ~path:"backend/456" in
   let s = Lid.Set.empty |> Lid.Set.add a |> Lid.Set.add a in
   assert_equal 1 (Lid.Set.cardinal s)
 
@@ -93,31 +93,31 @@ let test_lid_set_no_duplicates _ =
 let test_entity_data_construction _ =
   let data : Entity.data =
     [
-      ("name", Entity.String "Button");
-      ("count", Entity.Int 42);
-      ("ratio", Entity.Float 0.5);
-      ("active", Entity.Bool true);
-      ("tags", Entity.List [ Entity.String "ui"; Entity.String "form" ]);
-      ("extra", Entity.Null);
+      ("key", Entity.String "DBO-123");
+      ("story_points", Entity.Int 5);
+      ("progress", Entity.Float 0.75);
+      ("is_blocked", Entity.Bool false);
+      ("labels", Entity.List [ Entity.String "backend"; Entity.String "auth" ]);
+      ("due_date", Entity.Null);
     ]
   in
   assert_equal 6 (List.length data);
-  (match List.assoc "name" data with
-  | Entity.String s -> assert_equal "Button" s
+  (match List.assoc "key" data with
+  | Entity.String s -> assert_equal "DBO-123" s
   | _ -> assert_failure "Expected String");
-  match List.assoc "tags" data with
+  match List.assoc "labels" data with
   | Entity.List lst -> assert_equal 2 (List.length lst)
   | _ -> assert_failure "Expected List"
 
 let test_entity_raw _ =
-  let lid = Lid.make Lid.Comp ~path:"ui/Button" in
-  let data = [ ("label", Entity.String "Click me") ] in
+  let lid = Lid.make Lid.Issue ~path:"DBO-123" in
+  let data = [ ("summary", Entity.String "Fix login bug") ] in
   let raw = Entity.{ lid; data } in
   assert_equal lid raw.lid;
   assert_equal data raw.data
 
 let test_entity_processed_has_id _ =
-  let lid = Lid.make Lid.Store ~path:"cart" in
+  let lid = Lid.make Lid.Sprint ~path:"42" in
   let processed =
     Entity.
       { id = 7; lid; data = []; created = 1_000_000.0; updated = 1_000_001.0 }
@@ -128,22 +128,22 @@ let test_entity_processed_has_id _ =
 (* ── 7. Ref types ── *)
 
 let test_ref_pending_construction _ =
-  let src = Lid.make Lid.Fn ~path:"caller" in
-  let tgt = Lid.make Lid.Fn ~path:"callee" in
-  let pending = Ref.{ source = src; target = tgt; rel = Ref.Calls } in
+  let src = Lid.make Lid.Issue ~path:"DBO-123" in
+  let tgt = Lid.make Lid.MergeRequest ~path:"backend/456" in
+  let pending = Ref.{ source = src; target = tgt; rel = Ref.Linked_to } in
   assert_equal src pending.source;
   assert_equal tgt pending.target;
-  assert_equal Ref.Calls pending.rel
+  assert_equal Ref.Linked_to pending.rel
 
 let test_ref_resolved_construction _ =
-  let src = Lid.make Lid.Fn ~path:"caller" in
-  let tgt = Lid.make Lid.Fn ~path:"callee" in
+  let src = Lid.make Lid.Issue ~path:"DBO-123" in
+  let tgt = Lid.make Lid.MergeRequest ~path:"backend/456" in
   let resolved =
     Ref.
       {
         source = src;
         target = tgt;
-        rel = Ref.Calls;
+        rel = Ref.Linked_to;
         source_id = 1;
         target_id = 2;
       }
@@ -152,23 +152,25 @@ let test_ref_resolved_construction _ =
   assert_equal 2 resolved.target_id
 
 let test_ref_rel_to_string _ =
-  assert_equal "calls" (Ref.rel_to_string Ref.Calls);
+  assert_equal "linked_to" (Ref.rel_to_string Ref.Linked_to);
   assert_equal "belongs_to" (Ref.rel_to_string Ref.Belongs_to);
-  assert_equal "depends_on" (Ref.rel_to_string Ref.Depends_on)
+  assert_equal "triggered_by" (Ref.rel_to_string Ref.Triggered_by)
 
 let test_ref_rel_of_string _ =
-  assert_equal (Some Ref.Calls) (Ref.rel_of_string "calls");
+  assert_equal (Some Ref.Linked_to) (Ref.rel_of_string "linked_to");
   assert_equal (Some Ref.Belongs_to) (Ref.rel_of_string "belongs_to");
   assert_equal None (Ref.rel_of_string "unknown")
 
 let test_ref_rel_roundtrip _ =
   let rels =
     [
+      Ref.Linked_to;
       Ref.Belongs_to;
-      Ref.Calls;
-      Ref.Depends_on;
       Ref.Contains;
-      Ref.Implements;
+      Ref.Triggered_by;
+      Ref.Deployed_via;
+      Ref.Reviewed_by;
+      Ref.Assigned_to;
       Ref.References;
     ]
   in
@@ -182,9 +184,9 @@ let test_ref_rel_roundtrip _ =
 (* ── 8. Protocol ── *)
 
 let test_protocol_emit_command _ =
-  let lid = Lid.make Lid.Comp ~path:"ui/Modal" in
+  let lid = Lid.make Lid.Issue ~path:"DBO-123" in
   let input =
-    Protocol.{ lid; data = [ ("title", Entity.String "Hi") ]; refs = [] }
+    Protocol.{ lid; data = [ ("summary", Entity.String "Fix login") ]; refs = [] }
   in
   let cmd = Protocol.Emit { Protocol.entities = [ input ] } in
   match cmd with
@@ -192,36 +194,36 @@ let test_protocol_emit_command _ =
   | _ -> assert_failure "Expected Emit command"
 
 let test_protocol_emit_with_refs _ =
-  let src = Lid.make Lid.Fn ~path:"submit" in
-  let tgt = Lid.make Lid.Api ~path:"users/create" in
-  let ref_in = Protocol.{ target = tgt; rel = Ref.Calls } in
+  let src = Lid.make Lid.Issue ~path:"DBO-123" in
+  let tgt = Lid.make Lid.MergeRequest ~path:"backend/456" in
+  let ref_in = Protocol.{ target = tgt; rel = Ref.Linked_to } in
   let input = Protocol.{ lid = src; data = []; refs = [ ref_in ] } in
   let cmd = Protocol.Emit { Protocol.entities = [ input ] } in
   match cmd with
   | Protocol.Emit p ->
       let refs = (List.hd p.Protocol.entities).Protocol.refs in
       assert_equal 1 (List.length refs);
-      assert_equal Ref.Calls (List.hd refs).Protocol.rel
+      assert_equal Ref.Linked_to (List.hd refs).Protocol.rel
   | _ -> assert_failure "Expected Emit"
 
 let test_protocol_query_entities_with_kind _ =
   let q =
     Protocol.
-      { kind = Some Lid.Store; pattern = None; limit = None; offset = None }
+      { kind = Some Lid.Sprint; pattern = None; limit = None; offset = None }
   in
   let cmd = Protocol.Query_entities q in
   match cmd with
-  | Protocol.Query_entities q -> assert_equal (Some Lid.Store) q.Protocol.kind
+  | Protocol.Query_entities q -> assert_equal (Some Lid.Sprint) q.Protocol.kind
   | _ -> assert_failure "Expected Query_entities"
 
 let test_protocol_query_refs _ =
-  let src = Lid.make Lid.Fn ~path:"login" in
+  let src = Lid.make Lid.Issue ~path:"DBO-123" in
   let q =
     Protocol.
       {
         source = Some src;
         target = None;
-        rel_type = Some Ref.Calls;
+        rel_type = Some Ref.Linked_to;
         limit = None;
         offset = None;
       }
@@ -230,11 +232,11 @@ let test_protocol_query_refs _ =
   match cmd with
   | Protocol.Query_refs q ->
       assert_equal (Some src) q.Protocol.source;
-      assert_equal (Some Ref.Calls) q.Protocol.rel_type
+      assert_equal (Some Ref.Linked_to) q.Protocol.rel_type
   | _ -> assert_failure "Expected Query_refs"
 
 let test_protocol_emit_result _ =
-  let lid = Lid.make Lid.Comp ~path:"ui/Button" in
+  let lid = Lid.make Lid.Issue ~path:"DBO-123" in
   let result =
     Protocol.{ upserted = [ lid ]; refs_resolved = []; refs_pending = [] }
   in
@@ -264,12 +266,14 @@ let test_protocol_error_storage _ =
 let test_lid_of_string_to_string_identity _ =
   let cases =
     [
-      "comp:ui/Button";
-      "store:auth";
-      "fn:utils/formatDate";
-      "type:UserDto";
-      "provide:theme";
-      "e2e:login-flow";
+      "issue:DBO-123";
+      "sprint:42";
+      "mr:backend/456";
+      "pipeline:789";
+      "commit:abc123def";
+      "deploy:prod/2024-01";
+      "milestone:Q1-2025";
+      "gluser:ivan.petrov";
     ]
   in
   List.iter
@@ -286,9 +290,9 @@ let suite =
   "Domain logic"
   >::: [
          (* Lid parsing — valid *)
-         "lid_parse_comp" >:: test_lid_parse_valid_comp;
-         "lid_parse_store" >:: test_lid_parse_valid_store;
-         "lid_parse_type" >:: test_lid_parse_valid_type;
+         "lid_parse_issue" >:: test_lid_parse_valid_issue;
+         "lid_parse_sprint" >:: test_lid_parse_valid_sprint;
+         "lid_parse_mr" >:: test_lid_parse_valid_mr;
          "lid_parse_deep_path" >:: test_lid_parse_path_with_slashes;
          (* Lid parsing — errors *)
          "lid_parse_empty" >:: test_lid_parse_empty;
