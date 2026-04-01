@@ -38,7 +38,6 @@ Key decisions are in [docs/adr/](docs/adr/):
 
 - **[docs/usage-guide.md](docs/usage-guide.md)** — installation, MCP setup for Claude Code / Claude Desktop, prompts for first analysis
 - **[docs/customization-guide.md](docs/customization-guide.md)** — how to add or remove kind and relation types for your stack
-- **[docs/example-go-rest-api.md](docs/example-go-rest-api.md)** — full example for a Go backend project
 
 ## Architecture
 
@@ -185,7 +184,7 @@ Tools:
 
 ## Adapt to Your Stack or Your Tasks
 
-You can change kind and relation types for any stack. Full instructions: **[docs/customization-guide.md](docs/customization-guide.md)**, full example for Go backend: **[docs/example-go-rest-api.md](docs/example-go-rest-api.md)**.
+You can change kind and relation types for any stack. Full instructions: **[docs/customization-guide.md](docs/customization-guide.md)**.
 
 ## Build and Test
 

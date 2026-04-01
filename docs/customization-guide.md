@@ -1,13 +1,61 @@
 # Customization Guide
 
-aimemory has default kinds for frontend/Vue projects. If your project is different (backend, mobile, gamedev, ML) — you need to change the entity and relation vocabulary.
+> **Note:** This guide is a work in progress. Proper tooling for vocabulary
+> customization (a config file, a generator, or an interactive wizard) is
+> planned for a future release. Apologies for the rough edges.
+>
+> In the meantime: point your AI assistant at this file and the source files
+> listed below. The strict OCaml type system and pattern-match exhaustiveness
+> checks mean the compiler will catch most mistakes automatically — the AI can
+> handle the mechanical edits. Your only job is the domain design: what entities
+> exist in your system and how they relate to each other.
 
-## See current vocabulary
+aimemory ships with a vocabulary tuned for a specific domain. The branch
+[`jira-and-gitlab`](https://github.com/AvdienkoSergey/aimemory/tree/jira-and-gitlab)
+replaces the original Vue/frontend kinds with entities for **Jira + GitLab**
+collection. If your project needs a different domain, change the vocabulary.
+
+## Current defaults (branch `jira-and-gitlab`)
 
 ```bash
 aimemory kinds    # all entity kinds
 aimemory rels     # all relation types
 ```
+
+**Entity kinds:**
+
+| Prefix | Kind | Example LID |
+|---|---|---|
+| `issue` | Jira issue/task | `issue:DBO-123` |
+| `epic` | Jira epic | `epic:DBO-100` |
+| `sprint` | Jira sprint | `sprint:42` |
+| `board` | Jira board | `board:5` |
+| `version` | Jira fix version | `version:1.2.3` |
+| `jproject` | Jira project | `jproject:DBO` |
+| `juser` | Jira user | `juser:ivan.petrov` |
+| `mr` | GitLab merge request | `mr:backend/456` |
+| `pipeline` | GitLab CI pipeline | `pipeline:789` |
+| `job` | Pipeline job/step | `job:1234` |
+| `commit` | Git commit | `commit:abc123def` |
+| `branch` | Git branch | `branch:feature/login` |
+| `deploy` | GitLab deployment | `deploy:prod/2024-01` |
+| `release` | GitLab release | `release:v1.2.3` |
+| `glproject` | GitLab project | `glproject:backend` |
+| `gluser` | GitLab user | `gluser:ivan.petrov` |
+| `milestone` | GitLab milestone | `milestone:Q1-2025` |
+
+**Relation types:**
+
+| Rel | Meaning |
+|---|---|
+| `linked_to` | Issue linked to MR via DevStatus or key in description |
+| `belongs_to` | Issue in sprint; MR in pipeline |
+| `contains` | Sprint contains issues; pipeline contains jobs |
+| `triggered_by` | Pipeline triggered by MR push |
+| `deployed_via` | Issue reached production via deployment |
+| `reviewed_by` | MR reviewed by a GitLab user |
+| `assigned_to` | Issue/MR assigned to a user |
+| `references` | Generic fallback |
 
 ## How to apply changes
 
@@ -17,19 +65,40 @@ After any edit you **must** run:
 dune build && dune install
 ```
 
-`dune install` copies the binary to your opam switch (`~/.opam/<switch>/bin/aimemory`). Without this step the system uses the old binary. Your changes will not work.
+`dune install` copies the binary to your opam switch (`~/.opam/<switch>/bin/aimemory`). Without this step the system uses the old binary.
 
-Common mistake: running `opam install .` instead of `dune install`. Opam takes source from git, so uncommitted changes are ignored. Always use `dune install`.
+Common mistake: running `opam install .` instead of `dune install`. Opam reads from git — uncommitted changes are ignored. Always use `dune install`.
 
 ## What to edit
-
-You edit two files in `lib/domain/`. Enum lists in `tools.ml` are generated automatically — you do not need to touch them.
 
 | What | File | Compiler helps? |
 |---|---|---|
 | Entity kinds | `lib/domain/lid.ml` | Yes (pattern match), except `all_kinds` |
+| Entity kinds (interface) | `lib/domain/lid.mli` | No — must mirror `lid.ml` manually |
 | Relation types | `lib/domain/ref.ml` | Yes (pattern match), except `all_rels` |
-| AI descriptions (optional) | `lib/api/tools.ml` | No (just strings) |
+| AI-facing descriptions | `lib/api/tools.ml` | No (plain strings) |
+| Tests | `test/test_domain.ml`, `test/test_api.ml`, `test/test_engine.ml` | No |
+
+### Why `lib/api/tools.ml` is not optional
+
+`tools.ml` contains hardcoded string descriptions that the AI agent reads at runtime to know what kinds and rels exist. If you change `lid.ml` and `ref.ml` but skip `tools.ml`, the binary compiles fine — but the AI will still see the old vocabulary in its tool schemas and produce wrong LIDs.
+
+There are **three places** to update in `tools.ml`:
+
+1. **LID format description** (search for `"Logical ID in format"`) — lists every kind with examples, used in the `emit` tool schema.
+2. **Kind filter description** (search for `"Filter by entity kind"`) — lists kinds for the `query_entities` tool.
+3. **Rel filter description and enum** (search for `"Filter by rel"`) — lists rels for the `query_refs` tool. Also update the adjacent hardcoded list of rel strings in the same block.
+
+### Why tests must be updated
+
+The test suite uses concrete kind and rel values (e.g. `Lid.Fn`, `Ref.Calls`). After removing those variants the compiler will fail. Update all occurrences in:
+
+- `test/test_domain.ml` — lid parsing, roundtrip, ref construction tests
+- `test/test_api.ml` — JSON parsing and dispatch tests
+- `test/test_engine.ml` — ingest and query engine tests
+- `test/test_storage.ml` / `test/test_prop.ml` — if they reference specific kinds
+
+Replace old kind/rel names with equivalents from the new vocabulary. The logic of each test stays the same — only the concrete values change.
 
 ### Architecture decisions behind this design
 
@@ -39,148 +108,164 @@ You edit two files in `lib/domain/`. Enum lists in `tools.ml` are generated auto
 
 ## Add a new kind
 
-Example: a task tracker like Jira. AI agent builds a graph: epics contain stories, stories link to code components, bugs block releases, sprints group tasks.
+Example: you want to track **Confluence pages** alongside Jira issues — so AI can link an issue to its spec page.
 
-We add `epic` — all edits in one file `lib/domain/lid.ml`, three places:
+All edits in one file `lib/domain/lid.ml`, three places:
 
 ```ocaml
 (* 1. Add variant to the type *)
 and kind =
   | ...
-  | Epic    (* <-- new *)
+  | ConfluencePage    (* <-- new *)
 
 (* 2. Add string prefix — compiler will warn if you forget *)
 let prefix_of_kind = function
   | ...
-  | Epic -> "epic"
+  | ConfluencePage -> "cfpage"
 
 (* 3. Add to the list — compiler will NOT warn, do not forget *)
 let all_kinds = [
   ...
-  Epic;
+  ConfluencePage;
 ]
 ```
 
-`kind_of_prefix` (string -> kind) is computed automatically from `prefix_of_kind` + `all_kinds`. Enum in tool schemas is also generated from `all_kinds`.
+`kind_of_prefix` (string → kind) is computed automatically from `prefix_of_kind` + `all_kinds`. The enum in tool schemas is also generated from `all_kinds`.
 
-Same way we add `Story`, `Bug`, `Sprint`, `Release`, `Board`. After all edits:
+After edits:
 
 ```bash
 dune build && dune install
-aimemory kinds              # check that epic, story, bug, ... are there
+aimemory kinds              # check that cfpage is there
 ```
 
-Now AI can fill the graph:
+Now AI can link issues to their specs:
 
 ```bash
 aimemory call emit '{
   "entities": [
-    {"lid": "epic:PROJ-100",    "data": {"title": "Checkout redesign", "owner": "alice", "quarter": "Q2"}},
-    {"lid": "story:PROJ-101",   "data": {"title": "New payment form", "points": 5, "status": "in_progress"}},
-    {"lid": "story:PROJ-102",   "data": {"title": "Stripe integration", "points": 8, "status": "todo"}},
-    {"lid": "bug:PROJ-150",     "data": {"title": "Double charge", "priority": "critical", "status": "open"}},
-    {"lid": "sprint:2024-S12",  "data": {"goal": "MVP checkout", "start": "2024-03-18", "end": "2024-03-29"}},
-    {"lid": "release:2.5.0",    "data": {"target_date": "2024-04-01", "status": "planned"}},
-    {"lid": "comp:checkout/PaymentForm", "data": {"file": "src/checkout/PaymentForm.vue"}}
+    {"lid": "issue:DBO-123",  "data": {"title": "Login redesign"}},
+    {"lid": "cfpage:12345",   "data": {"title": "Login spec", "url": "https://confluence/pages/12345"}}
   ]
 }'
-```
 
-And relations between them:
-
-```bash
 aimemory call emit '{
   "entities": [
-    {"lid": "story:PROJ-101", "refs": [
-      {"target": "epic:PROJ-100",              "rel": "belongs_to"},
-      {"target": "comp:checkout/PaymentForm",  "rel": "references"},
-      {"target": "sprint:2024-S12",            "rel": "belongs_to"}
-    ]},
-    {"lid": "bug:PROJ-150", "refs": [
-      {"target": "story:PROJ-101",  "rel": "references"},
-      {"target": "release:2.5.0",   "rel": "references"}
-    ]},
-    {"lid": "release:2.5.0", "refs": [
-      {"target": "epic:PROJ-100",   "rel": "contains"}
+    {"lid": "issue:DBO-123", "refs": [
+      {"target": "cfpage:12345", "rel": "references"}
     ]}
   ]
 }'
 ```
 
-Queries that AI can now make:
-
-```bash
-# What is in the "Checkout redesign" epic?
-aimemory call query_refs '{"target": "epic:PROJ-100", "rel": "belongs_to"}'
-# → story:PROJ-101, story:PROJ-102
-
-# What bugs block release 2.5.0?
-aimemory call query_refs '{"target": "release:2.5.0"}'
-# → bug:PROJ-150
-
-# What is in the current sprint?
-aimemory call query_refs '{"target": "sprint:2024-S12", "rel": "belongs_to"}'
-# → story:PROJ-101
-
-# What code components does the story touch?
-aimemory call query_refs '{"source": "story:PROJ-101", "rel": "references"}'
-# → comp:checkout/PaymentForm
-```
-
-Optional: update description strings in `lib/api/tools.ml` (~line 330) where kind examples are listed for AI.
+Update `lib/api/tools.ml`: search for `"Logical ID in format"` and `"Filter by entity kind"` — add the new prefix to both description strings and their examples. Also update all tests in `test/test_domain.ml` and `test/test_api.ml` that construct LIDs with the old kinds.
 
 ## Add a new relation type
 
-Example: we add `trains_on` for ML pipelines.
+Example: you want `blocks` — a Jira issue blocks another issue.
 
-All edits in one file — `lib/domain/ref.ml`, three places:
+All edits in one file `lib/domain/ref.ml`, three places:
 
 ```ocaml
 (* 1. Add variant to the type *)
 type rel =
   | ...
-  | Trains_on    (* <-- new *)
+  | Blocks    (* <-- new *)
 
-(* 2. Add string conversion — compiler will warn *)
+(* 2. Add string conversion — compiler will warn if you forget *)
 let rel_to_string = function
   | ...
-  | Trains_on -> "trains_on"
+  | Blocks -> "blocks"
 
 (* 3. Add to the list — compiler will NOT warn, do not forget *)
-let all_rels = [...; Trains_on]
+let all_rels = [...; Blocks]
 ```
 
 `rel_of_string` is computed automatically. Enum lists in tool schemas too.
 
 ```bash
 dune build && dune install
-aimemory rels               # check that trains_on is there
+aimemory rels               # check that blocks is there
 ```
 
-Optional: add a description for the new relation in `lib/api/tools.ml`.
+Usage:
+
+```bash
+aimemory call emit '{
+  "entities": [
+    {"lid": "issue:DBO-150", "refs": [
+      {"target": "issue:DBO-123", "rel": "blocks"}
+    ]}
+  ]
+}'
+
+# What is blocked by DBO-150?
+aimemory call query_refs '{"source": "issue:DBO-150", "rel": "blocks"}'
+```
+
+Update `lib/api/tools.ml`: add the new rel string to the hardcoded enum list (search for `"linked_to"` to find it) and update the `"Filter by rel"` description string. Also update tests in `test/test_domain.ml` and `test/test_engine.ml` that use specific rel values.
 
 ## Remove kinds you do not need
 
-If your project is a backend service, you do not need `Composable`, `View`, `Layout`, etc. Removing extra kinds helps AI focus.
+If you only collect Jira data and do not need GitLab entities, remove the GitLab kinds to help AI focus.
 
-1. Remove the variant from `type kind`, from `prefix_of_kind`, from `all_kinds` in `lid.ml`
-2. The compiler will mark all other places that use the removed variant
-3. If the database had data with old kinds — run `aimemory reset`
+1. Remove the variants (`MergeRequest`, `Pipeline`, `Job`, `Commit`, `Branch`, `Deployment`, `Release`, `GlProject`, `GlUser`, `Milestone`) from `type kind`, `prefix_of_kind`, and `all_kinds` in `lib/domain/lid.ml`
+2. Also remove `lid.mli` declarations for those variants
+3. The compiler marks every other place that referenced the removed variants
+4. If the database had data with old kinds — run `aimemory reset`
 
 ```bash
 dune build && dune install
 ```
 
-## Full example
+## Example: querying a Jira+GitLab graph
 
-See [Go REST API example](example-go-rest-api.md) — a complete walkthrough for a backend order service with handlers, services, repos, migrations, and workers.
+```bash
+# Store a sprint with issues
+aimemory call emit '{
+  "entities": [
+    {"lid": "sprint:42",      "data": {"name": "Sprint 42", "start": "2024-03-18", "end": "2024-03-29"}},
+    {"lid": "issue:DBO-101",  "data": {"title": "Add login", "status": "in_progress", "points": 5}},
+    {"lid": "issue:DBO-102",  "data": {"title": "Fix logout", "status": "todo", "points": 2}},
+    {"lid": "mr:backend/78",  "data": {"title": "login: implement JWT", "state": "opened"}},
+    {"lid": "pipeline:789",   "data": {"status": "running", "ref": "feature/login"}}
+  ]
+}'
+
+aimemory call emit '{
+  "entities": [
+    {"lid": "issue:DBO-101", "refs": [
+      {"target": "sprint:42",       "rel": "belongs_to"},
+      {"target": "mr:backend/78",   "rel": "linked_to"}
+    ]},
+    {"lid": "mr:backend/78", "refs": [
+      {"target": "pipeline:789",    "rel": "triggered_by"}
+    ]}
+  ]
+}'
+
+# What issues are in sprint 42?
+aimemory call query_refs '{"target": "sprint:42", "rel": "belongs_to"}'
+# → issue:DBO-101, issue:DBO-102
+
+# What MR is linked to DBO-101?
+aimemory call query_refs '{"source": "issue:DBO-101", "rel": "linked_to"}'
+# → mr:backend/78
+
+# What pipeline did that MR trigger?
+aimemory call query_refs '{"source": "mr:backend/78", "rel": "triggered_by"}'
+# → pipeline:789
+```
 
 ## Checklist after customization
 
 ```bash
-dune build              # compiler catches missing pattern matches
-dune runtest            # tests check round-trip kind->string->kind
+dune build              # compiler catches missing pattern matches in lid.ml / ref.ml
+dune runtest            # tests check round-trip kind->string->kind and rel->string->rel
 dune install            # install the updated binary
-aimemory kinds          # visual check
-aimemory rels           # visual check
+aimemory kinds          # visual check — new kinds must appear here
+aimemory rels           # visual check — new rels must appear here
 ```
+
+**Common pitfall:** `dune build` passes but `dune runtest` fails — this usually means
+`tools.ml` or the tests still reference old kind/rel names. Fix those and re-run.
