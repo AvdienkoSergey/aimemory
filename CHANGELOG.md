@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/AvdienkoSergey/aimemory/compare/v1.0.0...v1.1.0) (2026-04-03)
+
+
+### Features
+
+* add Test kind and Covers relation for test-to-code mapping ([a7ce24b](https://github.com/AvdienkoSergey/aimemory/commit/a7ce24b0be41e33836b90de037f95a09dcd6f92c))
+
 ## [1.0.0](https://github.com/AvdienkoSergey/aimemory/compare/v0.1.1...v1.0.0) (2026-03-31)
 
 
