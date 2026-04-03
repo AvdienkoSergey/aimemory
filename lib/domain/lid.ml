@@ -32,6 +32,7 @@ and kind =
   | Hook
   | Typ
   | Provide
+  | Test
 
 type parse_error = Empty | Missing_colon | Unknown_kind of string | Empty_path
 
@@ -65,6 +66,7 @@ let prefix_of_kind = function
   | Hook -> "hook"
   | Typ -> "type"
   | Provide -> "provide"
+  | Test -> "test"
 
 (* IMPORTANT: Update this list when adding a new kind variant! The compiler
    won't warn — pattern matching in prefix_of_kind/kind_of_prefix will catch
@@ -100,6 +102,7 @@ let all_kinds =
     Hook;
     Typ;
     Provide;
+    Test;
   ]
 
 (* Derived from prefix_of_kind + all_kinds — no manual maintenance *)

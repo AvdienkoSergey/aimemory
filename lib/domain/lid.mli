@@ -35,6 +35,7 @@ type kind =
   | Hook  (** lifecycle hook *)
   | Typ  (** type/interface *)
   | Provide  (** provide/inject key *)
+  | Test  (** test case *)
 
 type parse_error =
   | Empty  (** "" — empty string *)

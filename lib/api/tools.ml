@@ -594,12 +594,14 @@ let tool_schemas () : t =
                                            "implements";
                                            "renders";
                                            "references";
+                                           "covers";
                                          ]) );
                                   ( "description",
                                     `String
                                       "Filter by rel. calls: who calls what. \
                                        depends_on: imports. contains: nesting. \
-                                       belongs_to: parent. implements: types."
+                                       belongs_to: parent. implements: types. \
+                                       covers: test-to-code mapping."
                                   );
                                 ] );
                             ( "limit",

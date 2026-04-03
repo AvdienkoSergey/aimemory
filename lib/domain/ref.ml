@@ -7,6 +7,7 @@ type rel =
   | Implements  (** validate implements Validator — type conformance *)
   | Renders  (** ParentComp renders ChildComp — template usage *)
   | References  (** generic link when nothing else fits *)
+  | Covers  (** test covers function — test-to-code mapping *)
 
 type pending = { source : Lid.t; target : Lid.t; rel : rel }
 
@@ -34,9 +35,10 @@ let rel_to_string = function
   | Implements -> "implements"
   | Renders -> "renders"
   | References -> "references"
+  | Covers -> "covers"
 
 let all_rels =
-  [ Belongs_to; Calls; Depends_on; Contains; Implements; Renders; References ]
+  [ Belongs_to; Calls; Depends_on; Contains; Implements; Renders; References; Covers ]
 
 (* Derived from rel_to_string + all_rels — no manual maintenance *)
 let rel_of_string s = List.find_opt (fun r -> rel_to_string r = s) all_rels
